@@ -3,10 +3,9 @@
 # the thread_id from the JSON event stream, and write Codex's final report
 # to the per-target report file.
 #
-# Differs from codex-plan-review/scripts/start.sh in exactly one way:
-# --sandbox workspace-write, so Codex can edit the working tree and run
-# lint/build. `codex exec resume` inherits this sandbox, so follow-up
-# turns reuse the shared resume.sh unchanged.
+# Explicitly selects the implementation flow and workspace-write sandbox.
+# `codex exec resume` inherits this sandbox; follow-up turns use this skill's
+# resume wrapper so Luna selection cannot depend on a state-directory name.
 #
 # Usage: start.sh --prompt-file <tpl> <target> [custom instructions…]
 # Exits 0 on success, propagates a non-zero Codex/pipeline status,
@@ -17,7 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Default state to THIS skill's directory (shared _common.sh would
 # otherwise default to codex-plan-review's state).
 STATE_DIR="${STATE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)/state}"
-export STATE_DIR
+CODEX_FLOW=implementation
+export STATE_DIR CODEX_FLOW
 # shellcheck source=../../codex-plan-review/scripts/_common.sh
 source "$SCRIPT_DIR/../../codex-plan-review/scripts/_common.sh"
 
@@ -63,7 +63,7 @@ if run_codex_with_progress \
     "$EVENTS_FILE" "$EVENTS_FILE.stderr" "$THREAD_FILE" truncate \
     codex exec \
         --json \
-        --skip-git-repo-check \
+        "${CODEX_GIT_FLAGS[@]}" \
         --sandbox workspace-write \
         --color never \
         -c model="$CODEX_MODEL" \
@@ -75,7 +75,9 @@ then
     :
 else
     rc=$?
-    [ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+    if [ ! -s "$THREAD_FILE" ]; then
+        capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE" || true
+    fi
     echo "error: codex exec failed (rc=$rc)" >&2
     if [ -s "$THREAD_FILE" ]; then
         echo "thread id captured for resume: $(cat "$THREAD_FILE")" >&2
@@ -84,7 +86,9 @@ else
     exit "$rc"
 fi
 
-[ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+if [ ! -s "$THREAD_FILE" ]; then
+    capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE" || true
+fi
 THREAD_ID="$(cat "$THREAD_FILE" 2>/dev/null || true)"
 
 if [ -z "$THREAD_ID" ] || [ "$THREAD_ID" = "null" ]; then

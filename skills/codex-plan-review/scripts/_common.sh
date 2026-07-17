@@ -12,32 +12,66 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STATE_DIR
 mkdir -p "$STATE_DIR"
 
-# Model/effort per flow (single source of truth for all Codex skills).
-# CODEX_MODEL / CODEX_EFFORT remain per-run overrides. HIGH classifications
-# select xhigh review effort when the orchestrator exports
-# TRIP_WORKFLOW_TIER=HIGH; routine reviews default to high.
+# Model/effort per explicit execution role (single source of truth).
+# Callers MUST set CODEX_FLOW before sourcing this file. Tier defaults to
+# MEDIUM for backwards-compatible manual invocations, but adaptive entry points
+# pass it explicitly.
 : "${CODEX_IMPLEMENT_MODEL_DEFAULT:=gpt-5.6-luna}"
 : "${CODEX_REVIEW_MODEL_DEFAULT:=gpt-5.6-sol}"
-: "${CODEX_IMPLEMENT_EFFORT_DEFAULT:=high}"
-: "${CODEX_REVIEW_EFFORT_DEFAULT:=high}"
-: "${CODEX_HIGH_RISK_EFFORT_DEFAULT:=xhigh}"
+: "${CODEX_IMPLEMENT_SMALL_EFFORT_DEFAULT:=medium}"
+: "${CODEX_IMPLEMENT_MEDIUM_EFFORT_DEFAULT:=high}"
+: "${CODEX_IMPLEMENT_HIGH_EFFORT_DEFAULT:=high}"
+: "${CODEX_REVIEW_STANDARD_EFFORT_DEFAULT:=high}"
+: "${CODEX_REVIEW_HIGH_EFFORT_DEFAULT:=xhigh}"
 
-case "$STATE_DIR" in
-    *codex-implement*)
-        CODEX_MODEL="${CODEX_MODEL:-$CODEX_IMPLEMENT_MODEL_DEFAULT}"
-        CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_IMPLEMENT_EFFORT_DEFAULT}"
-        ;;
+case "${TRIP_WORKFLOW_TIER:-MEDIUM}" in
+    SMALL|small) TRIP_WORKFLOW_TIER=SMALL ;;
+    MEDIUM|medium) TRIP_WORKFLOW_TIER=MEDIUM ;;
+    HIGH|high) TRIP_WORKFLOW_TIER=HIGH ;;
     *)
-        CODEX_MODEL="${CODEX_MODEL:-$CODEX_REVIEW_MODEL_DEFAULT}"
-        case "${TRIP_WORKFLOW_TIER:-}" in
-            HIGH|high) CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_HIGH_RISK_EFFORT_DEFAULT}" ;;
-            *)         CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_REVIEW_EFFORT_DEFAULT}" ;;
-        esac
+        echo "error: TRIP_WORKFLOW_TIER must be SMALL, MEDIUM, or HIGH" >&2
+        return 64
         ;;
 esac
-export CODEX_MODEL CODEX_EFFORT CODEX_IMPLEMENT_MODEL_DEFAULT
-export CODEX_REVIEW_MODEL_DEFAULT CODEX_IMPLEMENT_EFFORT_DEFAULT
-export CODEX_REVIEW_EFFORT_DEFAULT CODEX_HIGH_RISK_EFFORT_DEFAULT
+
+case "${CODEX_FLOW:-}" in
+    implementation)
+        CODEX_MODEL="$CODEX_IMPLEMENT_MODEL_DEFAULT"
+        case "$TRIP_WORKFLOW_TIER" in
+            SMALL)  CODEX_EFFORT="$CODEX_IMPLEMENT_SMALL_EFFORT_DEFAULT" ;;
+            MEDIUM) CODEX_EFFORT="$CODEX_IMPLEMENT_MEDIUM_EFFORT_DEFAULT" ;;
+            HIGH)   CODEX_EFFORT="$CODEX_IMPLEMENT_HIGH_EFFORT_DEFAULT" ;;
+        esac
+        ;;
+    review)
+        CODEX_MODEL="$CODEX_REVIEW_MODEL_DEFAULT"
+        case "$TRIP_WORKFLOW_TIER" in
+            HIGH) CODEX_EFFORT="$CODEX_REVIEW_HIGH_EFFORT_DEFAULT" ;;
+            *)    CODEX_EFFORT="$CODEX_REVIEW_STANDARD_EFFORT_DEFAULT" ;;
+        esac
+        ;;
+    *)
+        echo "error: CODEX_FLOW must be explicitly set to implementation or review" >&2
+        return 64
+        ;;
+esac
+export CODEX_FLOW TRIP_WORKFLOW_TIER CODEX_MODEL CODEX_EFFORT
+export CODEX_IMPLEMENT_MODEL_DEFAULT CODEX_REVIEW_MODEL_DEFAULT
+export CODEX_IMPLEMENT_SMALL_EFFORT_DEFAULT CODEX_IMPLEMENT_MEDIUM_EFFORT_DEFAULT
+export CODEX_IMPLEMENT_HIGH_EFFORT_DEFAULT CODEX_REVIEW_STANDARD_EFFORT_DEFAULT
+export CODEX_REVIEW_HIGH_EFFORT_DEFAULT
+
+# Git's repository check is a safety boundary. Only an explicit controlled
+# escape hatch adds the Codex bypass flag.
+CODEX_GIT_FLAGS=()
+case "${TRIP_ALLOW_NON_GIT:-0}" in
+    0) ;;
+    1) CODEX_GIT_FLAGS+=(--skip-git-repo-check) ;;
+    *)
+        echo "error: TRIP_ALLOW_NON_GIT must be 0 or 1" >&2
+        return 64
+        ;;
+esac
 
 # Derive a per-target key from a path-like string. For real paths we
 # resolve to absolute; for non-path targets (branch names, commit
@@ -110,7 +144,9 @@ capture_thread_from_events() {
 
 # Run a Codex command while saving complete JSONL/stderr and showing concise
 # progress. MODE is truncate for a fresh thread and append for resume turns.
-# set -o pipefail above ensures Codex, tee, and parser failures stay non-zero.
+# set -o pipefail above covers Codex, the JSONL tee, and the progress parser.
+# The stderr tee runs in process substitution; its exit status is not part of
+# the stdout pipeline and is intentionally not claimed here.
 run_codex_with_progress() {
     if [ "$#" -lt 5 ]; then
         echo "error: run_codex_with_progress requires events stderr thread mode command..." >&2

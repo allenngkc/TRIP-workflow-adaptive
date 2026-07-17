@@ -9,6 +9,8 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_FLOW=review
+export CODEX_FLOW
 # shellcheck source=_common.sh
 source "$SCRIPT_DIR/_common.sh"
 
@@ -55,7 +57,7 @@ if run_codex_with_progress \
     "$EVENTS_FILE" "$EVENTS_FILE.stderr" "$THREAD_FILE" truncate \
     codex exec \
         --json \
-        --skip-git-repo-check \
+        "${CODEX_GIT_FLAGS[@]}" \
         --sandbox read-only \
         --color never \
         -c model="$CODEX_MODEL" \
@@ -67,7 +69,9 @@ then
     :
 else
     rc=$?
-    [ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+    if [ ! -s "$THREAD_FILE" ]; then
+        capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE" || true
+    fi
     echo "error: codex exec failed (rc=$rc)" >&2
     if [ -s "$THREAD_FILE" ]; then
         echo "thread id captured for resume: $(cat "$THREAD_FILE")" >&2
@@ -78,7 +82,9 @@ fi
 
 # The live side stream normally writes this immediately; recover from the
 # saved events if process scheduling delayed it.
-[ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+if [ ! -s "$THREAD_FILE" ]; then
+    capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE" || true
+fi
 THREAD_ID="$(cat "$THREAD_FILE" 2>/dev/null || true)"
 
 if [ -z "$THREAD_ID" ] || [ "$THREAD_ID" = "null" ]; then

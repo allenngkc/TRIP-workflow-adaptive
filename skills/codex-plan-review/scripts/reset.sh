@@ -6,6 +6,8 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_FLOW="${CODEX_FLOW:-review}"
+export CODEX_FLOW
 # shellcheck source=_common.sh
 source "$SCRIPT_DIR/_common.sh"
 

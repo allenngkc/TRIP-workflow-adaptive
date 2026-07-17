@@ -8,7 +8,7 @@ argument-hint: "<plan-path> [extra context] | reset <plan-path> | show <plan-pat
 
 Iterative review of a planning document via Codex CLI. State (thread ID, review text, complete JSONL event log, and stderr log) persists under `.claude/skills/codex-plan-review/state/<sanitized-path>.*`. Start and resume print concise progress live; resumed events append to the same log.
 
-The companion `codex-code-review` skill shares the same scripts with its own prompt templates and `STATE_DIR`.
+The companion `codex-code-review` skill shares the same scripts with its own prompt templates and `STATE_DIR`. Review start/resume entry points explicitly set `CODEX_FLOW=review`; state paths never select the model.
 
 ## Arguments
 
@@ -35,11 +35,12 @@ The companion `codex-code-review` skill shares the same scripts with its own pro
 
 ## Notes
 
-- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation -> Luna, plan/code review -> Sol). Sol defaults to `high`; export `TRIP_WORKFLOW_TIER=HIGH` for centralized `xhigh` high-risk review, or override a run with `CODEX_MODEL` / `CODEX_EFFORT`.
+- Model/effort defaults live in `codex-plan-review/scripts/_common.sh`. Sol uses `high` below HIGH and mandatory `xhigh` for HIGH plan/final review.
 - `--sandbox read-only`. Safe to invoke autonomously.
+- Git repository validation remains enabled. Set `TRIP_ALLOW_NON_GIT=1` only for controlled non-Git execution.
 - On network failure, check `*.events.ndjson.stderr`. Run `reset.sh` and retry.
 - Thread IDs persisted per-plan (no `--last`). Concurrent reviews don't collide.
-- Session/turn, command, file-change, and error events appear live without printing raw JSON. `set -o pipefail` preserves Codex, `tee`, or parser failures.
+- Session/turn, command, file-change, and error events appear live without printing raw JSON. `pipefail` covers Codex, JSONL `tee`, and parser failures, not the separate stderr process-substitution status.
 - Extra context -> `{{EXTRA_PROMPT}}`. Keep short.
 
 ## Loop Shape

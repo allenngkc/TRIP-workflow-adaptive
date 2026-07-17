@@ -20,7 +20,7 @@ Read only:
 4. Directly relevant source files
 5. Directly relevant tests
 
-Do not recursively read Markdown or ingest the full repository. Print the routing decision. If a direct invocation classifies as MEDIUM or HIGH but has no plan, return to `TRIP-1-plan` to create the required plan before delegation.
+Do not recursively read Markdown or ingest the full repository. Print the routing decision, including the Luna/Sol effort profile. If **Fable planning** is enabled but no plan exists, return to `TRIP-1-plan` before delegation. Do not require a plan solely because of tier, and do not skip an override-enabled plan solely because the tier is SMALL.
 
 ## Step 1: Decide branch scope
 
@@ -33,6 +33,7 @@ Luna implements every tier. Do not use Sol for implementation.
 For a fresh session:
 
 ```bash
+export TRIP_WORKFLOW_TIER="<SMALL|MEDIUM|HIGH>"
 bash .claude/skills/codex-implement/scripts/start.sh \
     --prompt-file .claude/skills/codex-implement/prompts/implement.tpl \
     <plan-path-or-label> "<classification plus any scope limit>"
@@ -42,7 +43,8 @@ For later phases, retain the Luna thread:
 
 ```bash
 export STATE_DIR=".claude/skills/codex-implement/state"
-bash .claude/skills/codex-plan-review/scripts/resume.sh \
+export TRIP_WORKFLOW_TIER="<SMALL|MEDIUM|HIGH>"
+bash .claude/skills/codex-implement/scripts/resume.sh \
     --prompt-file .claude/skills/codex-implement/prompts/continue.tpl \
     <plan-path-or-label> "Now implement Phase 2"
 ```
@@ -90,10 +92,7 @@ Fix failures before any Sol review.
 
 ## Step 5: Conditional Sol final review
 
-- **SMALL**: skip Sol.
-- **MEDIUM**: run one fresh Sol final code-review thread by default.
-- **HIGH**: a fresh Sol final review is mandatory.
-- **Overrides**: `skip sol review` and `budget mode` may skip MEDIUM Sol review. They cannot remove HIGH review. `maximum review` and `full trip` enable it.
+Run this stage whenever **Sol final review** is enabled. SMALL skips it by default, MEDIUM enables it by default, and HIGH requires it. `maximum review` and `full trip` can enable it below HIGH; `skip sol review` and `budget mode` can remove it below HIGH but never from HIGH.
 
 At the start of this workflow, reset stale code-review state so the reviewer is independent of any previous run; resume that new thread only for its finding-resolution loop:
 

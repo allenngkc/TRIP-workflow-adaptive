@@ -16,8 +16,14 @@ cat > "$TMP_TEST/bin/codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 set -euo pipefail
 
-printf '%s ' "$@" >> "$FAKE_CODEX_ARGS"
-printf '\n' >> "$FAKE_CODEX_ARGS"
+{
+    printf 'FLOW=%s\n' "${CODEX_FLOW:-unset}"
+    printf 'TIER=%s\n' "${TRIP_WORKFLOW_TIER:-unset}"
+    printf 'STATE_DIR=%s\n' "${STATE_DIR:-unset}"
+    for arg in "$@"; do
+        printf 'ARG=%s\n' "$arg"
+    done
+} >> "$FAKE_CODEX_ARGS"
 
 mode=start
 if [ "${1:-}" = exec ] && [ "${2:-}" = resume ]; then
@@ -25,25 +31,39 @@ if [ "${1:-}" = exec ] && [ "${2:-}" = resume ]; then
 fi
 
 report=""
+sandbox=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -o|--output-last-message)
-            report="$2"
-            shift 2
-            ;;
+            report="$2"; shift 2 ;;
+        --sandbox)
+            sandbox="$2"; shift 2 ;;
         *) shift ;;
     esac
 done
 
-if [ -n "$report" ]; then
-    if [ "$mode" = resume ]; then
-        printf 'resume report\nAPPROVED\n' > "$report"
-    else
-        printf 'start report\nAPPROVED\n' > "$report"
+if [ "$mode" = start ] && [ -n "${FAKE_CODEX_SESSION:-}" ]; then
+    printf '%s\n' "$sandbox" > "$FAKE_CODEX_SESSION"
+fi
+if [ "$mode" = resume ] && [ "${CODEX_FLOW:-}" = implementation ]; then
+    inherited="$(cat "$FAKE_CODEX_SESSION" 2>/dev/null || true)"
+    if [ "$inherited" != workspace-write ]; then
+        echo "implementation resume did not inherit workspace-write" >&2
+        exit 88
     fi
 fi
 
-if [ "$mode" = start ]; then
+if [ -n "$report" ]; then
+    if [ "$mode" = resume ]; then
+        printf 'resume report\n%s\n' "$([ "${CODEX_FLOW:-}" = implementation ] && echo IMPLEMENTATION_COMPLETE || echo APPROVED)" > "$report"
+    else
+        printf 'start report\n%s\n' "$([ "${CODEX_FLOW:-}" = implementation ] && echo IMPLEMENTATION_COMPLETE || echo APPROVED)" > "$report"
+    fi
+fi
+
+if [ "${FAKE_CODEX_INVALID_JSON:-0}" = 1 ]; then
+    printf '%s\n' '{not-json}'
+elif [ "$mode" = start ]; then
     printf '%s\n' \
         '{"type":"thread.started","thread_id":"fake-thread-123"}' \
         '{"type":"turn.started"}' \
@@ -58,7 +78,7 @@ else
         '{"type":"turn.completed"}'
 fi
 
-echo "fake codex stderr" >&2
+echo "fake codex $mode stderr" >&2
 exit "${FAKE_CODEX_EXIT:-0}"
 FAKE_CODEX
 chmod +x "$TMP_TEST/bin/codex"
@@ -68,76 +88,178 @@ fail() {
     exit 1
 }
 
-export PATH="$TMP_TEST/bin:$PATH"
-export FAKE_CODEX_ARGS="$TMP_TEST/codex.args"
-export STATE_DIR="$TMP_TEST/review-state"
+assert_line() {
+    local file="$1"
+    local line="$2"
+    grep -Fqx -- "$line" "$file" || fail "missing '$line' in $file"
+}
 
-start_output="$(bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
-    --prompt-file "$ROOT/skills/codex-plan-review/prompts/start.tpl" \
-    "launcher review" 2>"$TMP_TEST/start.stderr")"
+assert_no_line() {
+    local file="$1"
+    local line="$2"
+    if grep -Fqx -- "$line" "$file"; then
+        fail "unexpected '$line' in $file"
+    fi
+}
+
+export PATH="$TMP_TEST/bin:$PATH"
+
+# SMALL implementation with a custom state path proves role selection is not
+# inferred from a directory name.
+export STATE_DIR="$TMP_TEST/custom-state"
+export TRIP_WORKFLOW_TIER=SMALL
+export FAKE_CODEX_ARGS="$TMP_TEST/small-start.args"
+export FAKE_CODEX_SESSION="$TMP_TEST/small.session"
+bash "$ROOT/skills/codex-implement/scripts/start.sh" \
+    --prompt-file "$ROOT/skills/codex-implement/prompts/implement.tpl" \
+    "small implementation" \
+    >"$TMP_TEST/small-start.stdout" 2>"$TMP_TEST/small-start.stderr"
+
+assert_line "$FAKE_CODEX_ARGS" 'FLOW=implementation'
+assert_line "$FAKE_CODEX_ARGS" 'TIER=SMALL'
+assert_line "$FAKE_CODEX_ARGS" "STATE_DIR=$STATE_DIR"
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model=gpt-5.6-luna'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model_reasoning_effort=medium'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=workspace-write'
+assert_no_line "$FAKE_CODEX_ARGS" 'ARG=--skip-git-repo-check'
+grep -Fq '[codex] command started: npm test' "$TMP_TEST/small-start.stdout" \
+    || fail "fresh implementation progress was not live"
+assert_line "$TMP_TEST/small.session" 'workspace-write'
 
 events="$(find "$STATE_DIR" -name '*.events.ndjson' -print -quit)"
-thread="$(find "$STATE_DIR" -name '*.thread' -print -quit)"
 report="$(find "$STATE_DIR" -name '*.review.txt' -print -quit)"
-[ -n "$events" ] && [ -n "$thread" ] && [ -n "$report" ] \
-    || fail "start did not create event, thread, and report state"
-[ "$(cat "$thread")" = fake-thread-123 ] \
-    || fail "start did not retain the thread id"
 [ "$(wc -l < "$events" | tr -d ' ')" = 5 ] \
-    || fail "start did not save all JSONL events"
-grep -Fqx 'fake codex stderr' "$events.stderr" \
-    || fail "start did not save stderr"
-grep -Fq '[codex] command started: npm test' <<< "$start_output" \
-    || fail "start did not show concise command progress"
-grep -Fq 'start report' <<< "$start_output" \
-    || fail "start did not print the existing report file"
-grep -Fq -- '--sandbox read-only' "$FAKE_CODEX_ARGS" \
-    || fail "review launcher did not use read-only sandbox"
+    || fail "fresh implementation did not save all JSONL events"
+assert_line "$events.stderr" 'fake codex start stderr'
+grep -Fq 'fake codex start stderr' "$TMP_TEST/small-start.stderr" \
+    || fail "fresh implementation stderr was not visible live"
+grep -Fq 'IMPLEMENTATION_COMPLETE' "$report" \
+    || fail "fresh implementation report was not preserved"
 
-resume_output="$(bash "$ROOT/skills/codex-plan-review/scripts/resume.sh" \
-    --prompt-file "$ROOT/skills/codex-plan-review/prompts/resume.tpl" \
-    "launcher review" 2>"$TMP_TEST/resume.stderr")"
+# Public implementation resume must explicitly retain Luna and the custom
+# state path. The fake validates the sandbox inherited from the start.
+export FAKE_CODEX_ARGS="$TMP_TEST/small-resume.args"
+bash "$ROOT/skills/codex-implement/scripts/resume.sh" \
+    --prompt-file "$ROOT/skills/codex-implement/prompts/continue.tpl" \
+    "small implementation" \
+    >"$TMP_TEST/small-resume.stdout" 2>"$TMP_TEST/small-resume.stderr"
+
+assert_line "$FAKE_CODEX_ARGS" 'FLOW=implementation'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model=gpt-5.6-luna'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model_reasoning_effort=medium'
+assert_no_line "$FAKE_CODEX_ARGS" 'ARG=--sandbox'
+assert_no_line "$FAKE_CODEX_ARGS" 'ARG=--skip-git-repo-check'
+grep -Fq '[codex] command started: npm run build' "$TMP_TEST/small-resume.stdout" \
+    || fail "resumed implementation progress was not live"
 [ "$(wc -l < "$events" | tr -d ' ')" = 9 ] \
-    || fail "resume did not append all JSONL events"
-grep -Fq '[codex] command started: npm run build' <<< "$resume_output" \
-    || fail "resume did not show concise command progress"
-grep -Fq 'resume report' <<< "$resume_output" \
-    || fail "resume did not print the existing report file"
+    || fail "resumed implementation did not append all JSONL events"
+[ "$(grep -c '^fake codex .* stderr$' "$events.stderr")" = 2 ] \
+    || fail "fresh and resumed implementation stderr were not retained"
+grep -Fq 'fake codex resume stderr' "$TMP_TEST/small-resume.stderr" \
+    || fail "resumed implementation stderr was not visible live"
+grep -Fq 'resume report' "$report" \
+    || fail "resumed implementation report was not preserved"
 
-export STATE_DIR="$TMP_TEST/implement-state"
-implement_output="$(bash "$ROOT/skills/codex-implement/scripts/start.sh" \
-    --prompt-file "$ROOT/skills/codex-implement/prompts/implement.tpl" \
-    "launcher implementation" 2>"$TMP_TEST/implement.stderr")"
-grep -Fq -- '--sandbox workspace-write' "$FAKE_CODEX_ARGS" \
-    || fail "implementation launcher did not use workspace-write"
-grep -Fq '[codex] command started: npm test' <<< "$implement_output" \
-    || fail "implementation start did not show progress"
+run_implementation_profile() {
+    local tier="$1"
+    local effort="$2"
+    local label="$3"
+    export STATE_DIR="$TMP_TEST/$label-state"
+    export TRIP_WORKFLOW_TIER="$tier"
+    export FAKE_CODEX_ARGS="$TMP_TEST/$label.args"
+    export FAKE_CODEX_SESSION="$TMP_TEST/$label.session"
+    bash "$ROOT/skills/codex-implement/scripts/start.sh" \
+        --prompt-file "$ROOT/skills/codex-implement/prompts/implement.tpl" \
+        "$label" >"$TMP_TEST/$label.stdout" 2>"$TMP_TEST/$label.stderr"
+    assert_line "$FAKE_CODEX_ARGS" 'FLOW=implementation'
+    assert_line "$FAKE_CODEX_ARGS" 'ARG=model=gpt-5.6-luna'
+    assert_line "$FAKE_CODEX_ARGS" "ARG=model_reasoning_effort=$effort"
+    assert_line "$FAKE_CODEX_ARGS" 'ARG=workspace-write'
+    assert_no_line "$FAKE_CODEX_ARGS" 'ARG=--skip-git-repo-check'
+}
 
-export STATE_DIR="$TMP_TEST/high-review-state"
-export TRIP_WORKFLOW_TIER=HIGH
-high_output="$(bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
+run_implementation_profile MEDIUM high medium-implementation
+run_implementation_profile HIGH high high-implementation
+
+run_review_profile() {
+    local tier="$1"
+    local effort="$2"
+    local label="$3"
+    export STATE_DIR="$TMP_TEST/$label-state"
+    export TRIP_WORKFLOW_TIER="$tier"
+    export FAKE_CODEX_ARGS="$TMP_TEST/$label.args"
+    export FAKE_CODEX_SESSION="$TMP_TEST/$label.session"
+    bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
+        --prompt-file "$ROOT/skills/codex-plan-review/prompts/start.tpl" \
+        "$label" >"$TMP_TEST/$label.stdout" 2>"$TMP_TEST/$label.stderr"
+    assert_line "$FAKE_CODEX_ARGS" 'FLOW=review'
+    assert_line "$FAKE_CODEX_ARGS" 'ARG=model=gpt-5.6-sol'
+    assert_line "$FAKE_CODEX_ARGS" "ARG=model_reasoning_effort=$effort"
+    assert_line "$FAKE_CODEX_ARGS" 'ARG=read-only'
+    assert_no_line "$FAKE_CODEX_ARGS" 'ARG=--skip-git-repo-check'
+}
+
+run_review_profile MEDIUM high medium-final-review
+run_review_profile HIGH xhigh high-plan-review
+run_review_profile HIGH xhigh high-final-review
+
+# Review resume also establishes review flow explicitly.
+export STATE_DIR="$TMP_TEST/medium-final-review-state"
+export TRIP_WORKFLOW_TIER=MEDIUM
+export FAKE_CODEX_ARGS="$TMP_TEST/medium-review-resume.args"
+export FAKE_CODEX_SESSION="$TMP_TEST/medium-final-review.session"
+bash "$ROOT/skills/codex-plan-review/scripts/resume.sh" \
+    --prompt-file "$ROOT/skills/codex-plan-review/prompts/resume.tpl" \
+    "medium-final-review" \
+    >"$TMP_TEST/medium-review-resume.stdout" 2>"$TMP_TEST/medium-review-resume.stderr"
+assert_line "$FAKE_CODEX_ARGS" 'FLOW=review'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model=gpt-5.6-sol'
+assert_line "$FAKE_CODEX_ARGS" 'ARG=model_reasoning_effort=high'
+
+# Explicit non-Git opt-in adds the bypass; default cases above retained the
+# repository check by omitting it.
+export STATE_DIR="$TMP_TEST/non-git-state"
+export TRIP_WORKFLOW_TIER=SMALL
+export TRIP_ALLOW_NON_GIT=1
+export FAKE_CODEX_ARGS="$TMP_TEST/non-git.args"
+export FAKE_CODEX_SESSION="$TMP_TEST/non-git.session"
+bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
     --prompt-file "$ROOT/skills/codex-plan-review/prompts/start.tpl" \
-    "high-risk review" 2>"$TMP_TEST/high.stderr")"
-unset TRIP_WORKFLOW_TIER
-grep -Fq 'model/effort: gpt-5.6-sol / xhigh' <<< "$high_output" \
-    || fail "HIGH review did not select centralized xhigh effort"
+    "non-git opt-in" >"$TMP_TEST/non-git.stdout" 2>"$TMP_TEST/non-git.stderr"
+assert_line "$FAKE_CODEX_ARGS" 'ARG=--skip-git-repo-check'
+unset TRIP_ALLOW_NON_GIT
 
+# A Codex failure must survive tee and parsing unchanged.
 export STATE_DIR="$TMP_TEST/failure-state"
+export TRIP_WORKFLOW_TIER=MEDIUM
+export FAKE_CODEX_ARGS="$TMP_TEST/failure.args"
+export FAKE_CODEX_SESSION="$TMP_TEST/failure.session"
 export FAKE_CODEX_EXIT=9
 set +e
 bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
     --prompt-file "$ROOT/skills/codex-plan-review/prompts/start.tpl" \
-    "launcher failure" \
-    >"$TMP_TEST/failure.stdout" 2>"$TMP_TEST/failure.stderr"
+    "launcher failure" >"$TMP_TEST/failure.stdout" 2>"$TMP_TEST/failure.stderr"
 failure_rc=$?
 set -e
 unset FAKE_CODEX_EXIT
-
 [ "$failure_rc" = 9 ] \
     || fail "launcher hid Codex failure (expected 9, got $failure_rc)"
-grep -Fq 'thread id captured for resume: fake-thread-123' "$TMP_TEST/failure.stderr" \
-    || fail "failed start did not preserve the resume thread id"
-grep -Fq '[codex] turn completed' "$TMP_TEST/failure.stdout" \
-    || fail "failed start lost its live progress stream"
+
+# A successful Codex process emitting invalid JSON must still fail through the
+# unbuffered parser.
+export STATE_DIR="$TMP_TEST/parser-failure-state"
+export FAKE_CODEX_ARGS="$TMP_TEST/parser-failure.args"
+export FAKE_CODEX_SESSION="$TMP_TEST/parser-failure.session"
+export FAKE_CODEX_INVALID_JSON=1
+set +e
+bash "$ROOT/skills/codex-plan-review/scripts/start.sh" \
+    --prompt-file "$ROOT/skills/codex-plan-review/prompts/start.tpl" \
+    "parser failure" >"$TMP_TEST/parser-failure.stdout" 2>"$TMP_TEST/parser-failure.stderr"
+parser_rc=$?
+set -e
+unset FAKE_CODEX_INVALID_JSON
+[ "$parser_rc" -ne 0 ] || fail "launcher hid parser failure"
+grep -Fq '[codex] progress parser error:' "$TMP_TEST/parser-failure.stderr" \
+    || fail "launcher parser failure was not reported"
 
 echo "codex launchers: PASS"

@@ -20,32 +20,27 @@ Use `.claude/skills/trip-classify/SKILL.md` to classify `$ARGUMENTS`. Inspect on
 
 Do not recursively read Markdown or ingest the full repository. Print the classifier's `Workflow tier`, `Reason`, enabled stages, skipped stages, and any override notes before continuing.
 
-- **SMALL**: skip the plan document and continue directly with `TRIP-2-implement`, carrying the classification and original request.
-- **MEDIUM**: write a focused implementation plan. Skip requirements grilling, Sol plan review, and mandatory user approval unless an override enables them.
-- **HIGH**: conduct requirements discovery, write a detailed frozen plan, run a fresh Sol plan review, and obtain user approval when user input is available.
-- **`full trip`**: enable the complete original ceremony regardless of the underlying risk label.
+Treat `Stages enabled` as the execution contract:
+
+- Create a plan whenever **Fable planning** is enabled, even when the tier is SMALL.
+- Run a fresh Sol plan review whenever **Sol plan review** is enabled.
+- Request approval whenever **User plan approval** is enabled.
+- Skip planning only when **Fable planning** is listed under skipped stages.
+- `full trip` executes every enabled full-TRIP stage without changing a low inherent-risk tier.
 
 Never downgrade HIGH because the user requested `tier: small`, `tier: medium`, `skip sol review`, or `budget mode`. Explain the promotion.
 
 ## Step 1: Discovery and clarification
 
-### SMALL
-
-Skip discovery unless one answer is genuinely blocking safe implementation.
-
-### MEDIUM
-
-Summarize the intended behavior and proceed from reasonable assumptions. Ask a concise question only for a blocking ambiguity that cannot be resolved from the repository. Do not run an extended requirements interview.
-
-### HIGH
-
-Before writing the plan, summarize your understanding and use `AskUserQuestion` to resolve expensive ambiguity around scope, observable behavior, constraints, compatibility, safety, migration/rollback, and acceptance criteria.
+Run requirements discovery when **Requirements grilling** is enabled. Before writing the plan, summarize your understanding and use `AskUserQuestion` to resolve ambiguity around scope, observable behavior, constraints, compatibility, safety, migration/rollback, and acceptance criteria.
 
 Ask only decision-relevant questions with concrete options. Continue until the contract is sufficiently clear, up to three rounds. If material ambiguity remains, stop and surface it; do not freeze an unsafe plan.
 
+When Requirements grilling is skipped, summarize the intended behavior and proceed from reasonable assumptions. Ask only a genuinely blocking question. Do not conduct an extended interview merely because planning is enabled.
+
 ## Step 2: Create the plan
 
-For MEDIUM or HIGH, propose a SemVer version and create:
+Whenever **Fable planning** is enabled, propose a SemVer version and create:
 
 `docs/1-plans/F_[version]_[feature-name].plan.md`
 
@@ -115,13 +110,17 @@ Then use these sections:
 - [ ] Update `docs/ARCHI.md` if architecture changes
 ```
 
-MEDIUM plans may omit inapplicable sections and normally use one phase. HIGH plans must be detailed enough that Luna can implement without guessing; include migration/rollback, compatibility, security boundaries, failure behavior, and phased ordering when relevant.
+- **SMALL**: create a lightweight, focused plan with the classification, exact file(s), intended edit, relevant verification, and short to-do list. Omit inapplicable architecture sections.
+- **MEDIUM**: create a focused plan, normally with one phase, that covers affected components and tests.
+- **HIGH**: create a detailed plan that Luna can implement without guessing; include migration/rollback, compatibility, security boundaries, failure behavior, and phased ordering when relevant.
+
+If Fable planning is skipped, do not create a plan; carry the classification and original task directly to `TRIP-2-implement`.
 
 Do not write implementation code or test code during planning.
 
 ## Step 3: Sol plan review
 
-Run this stage only for HIGH, `include sol plan review`, `maximum review`, or `full trip`. MEDIUM skips it by default; SMALL has no plan to review.
+Run this stage whenever **Sol plan review** is enabled. Never skip it solely because the risk tier is SMALL or MEDIUM. The enabled Fable planning stage guarantees there is a plan to review.
 
 Use a **fresh**, read-only Sol thread. Set the classification for centralized effort selection:
 
@@ -157,10 +156,9 @@ Cap at five rounds unless the user set another limit. Sol is an independent revi
 
 Present the feature, approach, key files, workflow tier, enabled/skipped stages, and Sol status.
 
-- **HIGH**: use `AskUserQuestion` to request approval of the frozen plan. Do not implement until the user approves when input is available.
-- **MEDIUM**: user approval is optional. If the user requested planning only, stop after presenting the plan. If the active request already authorizes implementation, continue directly to `TRIP-2-implement` with the plan.
-- **SMALL**: no plan approval; hand the original task and classification directly to `TRIP-2-implement`.
-- **Full TRIP**: preserve the original explicit user-approval gate.
+- If **User plan approval** is enabled, use `AskUserQuestion` and do not implement until the user approves when input is available.
+- If approval is skipped and the user requested planning only, stop after presenting the plan.
+- Otherwise continue to `TRIP-2-implement`, carrying the plan when one exists or the original task when planning was skipped.
 
 If the user changes scope materially after classification or approval, reclassify before delegation.
 

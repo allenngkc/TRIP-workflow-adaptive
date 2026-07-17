@@ -25,7 +25,7 @@ Use risk and ambiguity as the strongest signals.
 
 - **SMALL**: localized, obvious, reversible, normally about 1-2 files, with simple verification and no architecture, security, auth, persistence, migration, payment, concurrency, public-API, or data-loss impact.
 - **MEDIUM**: multi-file feature, moderate business logic, endpoint, meaningful refactor, external integration, or repetitive mechanical change that needs tests but has no high-risk property and no expensive unresolved ambiguity.
-- **HIGH**: ambiguous requirements with expensive consequences, major architecture or cross-cutting work, or any authentication, authorization, security-sensitive behavior, payment/financial logic, database migration, destructive persistence operation, data-loss risk, concurrency/distributed behavior, or public API compatibility risk.
+- **HIGH**: ambiguous requirements with expensive consequences, major architecture or cross-cutting work, or any authentication, authorization, security-sensitive behavior, payment/financial logic, database/schema/data migration, destructive persistence operation, data-loss risk, concurrency/distributed behavior, or public API compatibility risk.
 
 Promote a small-looking change to HIGH when any high-risk property is present. Do not promote a large repetitive low-risk rename to HIGH merely because it touches many files.
 
@@ -61,6 +61,8 @@ Treat overrides as preferences:
 - `full trip` enables every stage, including release, without changing the underlying risk label.
 - Release is otherwise skipped unless explicitly requested or `/TRIP-3-release` is invoked.
 
+Enabled stages are authoritative. Tier describes inherent risk; it does not cancel ceremony added by an override. In particular, create a lightweight plan for SMALL whenever Fable planning is enabled, and run Sol plan review whenever that stage is enabled.
+
 ## Select stages
 
 | Tier | Default stages |
@@ -69,7 +71,9 @@ Treat overrides as preferences:
 | MEDIUM | Fable plan -> Luna implementation -> Fable diff review/fixes/tests -> fresh Sol final review -> Fable resolves valid findings |
 | HIGH | Fable requirements discovery -> detailed frozen plan -> fresh Sol plan review -> user approval when available -> Luna implementation -> Fable diff review/fixes/tests -> fresh Sol final review -> Fable resolves valid findings |
 
-Use Sol only for independent review. Never use the same Sol thread for plan and final code review, and never use Sol to implement. Default Sol effort is `high`; export `TRIP_WORKFLOW_TIER=HIGH` so centralized launcher configuration selects `xhigh` for genuinely high-risk review.
+Plan depth follows risk when planning is enabled: SMALL is lightweight, MEDIUM is focused, and HIGH is detailed. A generic tooling/framework/test migration is normally MEDIUM; database, schema, persistence, storage, or data migration is HIGH. Promote a tooling migration only when repository context shows major architecture, compatibility, or other HIGH risk.
+
+Use Sol only for independent review. Never use the same Sol thread for plan and final code review, and never use Sol to implement. Export `TRIP_WORKFLOW_TIER` before launch so centralized configuration selects Luna `medium/high/high` for SMALL/MEDIUM/HIGH and Sol `xhigh` only for HIGH review.
 
 If implementation changes architecture, require `docs/ARCHI.md` to be updated in the same change when that file is present.
 

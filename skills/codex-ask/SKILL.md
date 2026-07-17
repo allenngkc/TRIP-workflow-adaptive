@@ -55,5 +55,5 @@ export STATE_DIR=".claude/skills/codex-ask/state"
 ## Notes
 
 - Read-only sandbox — Codex can read the repo but change nothing.
-- Model/effort come from `codex-plan-review/scripts/_common.sh` (non-implement flows get the review-class model by default); override per run via `CODEX_MODEL` / `CODEX_EFFORT`.
+- The shared review entry points explicitly select `CODEX_FLOW=review`; centralized defaults select Sol independently of `STATE_DIR`.
 - Surface Codex's answer to the user verbatim when it disagrees with your position — the disagreement itself is the valuable output.

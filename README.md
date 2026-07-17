@@ -36,15 +36,15 @@ The onboarding is: copy the folder, run init, start coding. If you can count to 
 
 ## Adaptive workflow
 
-Start with `/TRIP-1-plan <task>`. It invokes the shared `trip-classify` rules before any delegation. Small work routes straight to implementation; medium and high work create the appropriate plan. You can still invoke `/TRIP-2-implement` with an existing plan or task, and `/TRIP-3-release` remains available for explicit manual control.
+Start with `/TRIP-1-plan <task>`. It invokes the shared `trip-classify` rules before any delegation. The enabled-stage list is authoritative: SMALL routes straight to implementation by default, but receives a lightweight plan and any requested review ceremony when overrides enable those stages. You can still invoke `/TRIP-2-implement` with an existing plan or task, and `/TRIP-3-release` remains available for explicit manual control.
 
 | Tier | Typical work | Enabled by default | Skipped by default |
 | --- | --- | --- | --- |
 | **SMALL** | Typo, copy/UI tweak, simple config, obvious localized fix | Luna implementation; Fable diff review and relevant verification | Formal plan, requirements grilling, both Sol reviews, release |
 | **MEDIUM** | Multi-file feature, endpoint, business logic, meaningful refactor, large mechanical rename | Fable plan; Luna implementation; Fable fixes/tests; one fresh Sol final review | Requirements grilling, Sol plan review, mandatory plan approval, release |
-| **HIGH** | Auth, security, payments, migration, destructive data, concurrency, public compatibility, major architecture | Requirements discovery; detailed plan; fresh Sol plan review; plan approval; Luna implementation; Fable fixes/tests; fresh Sol final review | Release unless explicitly requested |
+| **HIGH** | Auth, security, payments, database/data migration, destructive data, concurrency, public compatibility, major architecture | Requirements discovery; detailed plan; fresh Sol plan review; plan approval; Luna implementation; Fable fixes/tests; fresh Sol final review | Release unless explicitly requested |
 
-Classification is a judgment call, not a rigid line-count formula. Risk and ambiguity dominate size: a one-file authentication change is HIGH, while a large repetitive low-risk rename can remain MEDIUM. The classifier considers affected files, implementation size, ambiguity, architecture, security/auth, persistence and migrations, public API compatibility, payments, concurrency, integrations, testing complexity, reversibility, and data-loss potential.
+Classification is a judgment call, not a rigid line-count formula. Risk and ambiguity dominate size: a one-file authentication change is HIGH, while a large repetitive low-risk rename can remain MEDIUM. Tooling migrations such as Jest-to-Vitest normally remain MEDIUM; database, schema, persistence, storage, or data migrations are HIGH. The classifier considers affected files, implementation size, ambiguity, architecture, security/auth, persistence, public API compatibility, payments, concurrency, integrations, testing complexity, reversibility, and data-loss potential.
 
 ### Overrides
 
@@ -53,6 +53,7 @@ Add preferences directly to the request: `tier: small`, `tier: medium`, `tier: h
 - `full trip` enables every original stage, including release.
 - `budget mode` or `skip sol review` can remove Sol from SMALL/MEDIUM while retaining Fable verification.
 - `include sol plan review` and `maximum review` add independent review without forcing release.
+- Overrides add ceremony without changing inherent risk. For example, `Fix typo, include sol plan review` remains SMALL but creates a lightweight plan and sends it to Sol.
 - A lower tier or reduced review is rejected when auth, security, payments, migrations, destructive data, concurrency, public compatibility, or comparable HIGH risk is present. The classifier prints why it promoted the route.
 
 Example output:
@@ -145,11 +146,25 @@ Luna implementation delegated to Codex CLI in a **workspace-write sandbox**: it 
 
 Iterative Sol review loops powered by Codex CLI. HIGH plans get a fresh read-only plan review; MEDIUM/HIGH code gets a separate fresh final review unless a safe override skips MEDIUM review. Threads persist only within their own convergence loop (`start -> REQUEST_CHANGES -> fix -> resume -> APPROVED`).
 
-Per-flow model defaults live in one file: `codex-plan-review/scripts/_common.sh`. Luna handles implementation; Sol is reserved for independent adversarial review; Fable owns requirements, plans, verification strategy, fixes, and final judgment. Sol defaults to `high` reasoning. HIGH risk exports the workflow tier and selects centralized `xhigh`; per-run `CODEX_MODEL` / `CODEX_EFFORT` overrides remain available.
+Explicit `CODEX_FLOW=implementation|review` selects the role; state-directory names never select a model. Defaults remain centralized in `codex-plan-review/scripts/_common.sh`:
+
+| Execution | Model role | Effort |
+| --- | --- | --- |
+| SMALL implementation | Luna | `medium` |
+| MEDIUM implementation | Luna | `high` |
+| HIGH implementation | Luna | `high` |
+| SMALL override review or MEDIUM final review | Sol | `high` |
+| HIGH plan or final review | Sol | `xhigh` |
+
+Change the centralized `*_MODEL_DEFAULT` and `*_EFFORT_DEFAULT` variables to customize these values. Fable still owns requirements, plans, verification strategy, fixes, and final judgment.
+
+Fresh and resumed implementation use the public `codex-implement/scripts/start.sh` and `resume.sh` entry points. Both explicitly select Luna; resume continues the workspace-write sandbox established by the fresh session.
+
+Codex's Git repository safety check is enabled by default. In a controlled non-Git environment only, set `TRIP_ALLOW_NON_GIT=1` to add `--skip-git-repo-check`; do not use this escape hatch for normal TRIP work.
 
 ### Live Codex progress
 
-Implementation, review, and resume launchers save the complete JSONL event stream and stderr under their existing state paths while printing a concise live stream: session/turn lifecycle, commands and tests starting/completing, file changes, and errors. Raw JSON is not dumped to the terminal. Thread IDs and final report files remain available for resume/show operations. The bundled parser uses only the Python 3 standard library (no `jq` package), and the `tee` pipelines run under `set -o pipefail`, so Codex, logging, or parser failures remain non-zero instead of being hidden.
+Implementation, review, and resume launchers save the complete JSONL event stream and stderr under their existing state paths while printing a concise live stream: session/turn lifecycle, commands and tests starting/completing, file changes, and errors. Raw JSON is not dumped to the terminal. Thread IDs and final report files remain available for resume/show operations. The bundled parser uses only the Python 3 standard library (no `jq` package). `set -o pipefail` propagates Codex failures, JSONL `tee` failures, and parser failures. The stderr logger uses process substitution, so its own process exit status is not part of that pipeline; stderr is still displayed and saved during normal operation.
 
 ### `/TRIP-review` & `/TRIP-test`
 

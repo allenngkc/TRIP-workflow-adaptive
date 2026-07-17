@@ -53,12 +53,12 @@ Codex uses `git status -s` / `git diff HEAD` in read-only sandbox. If those fail
 
 ## Notes
 
-- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation -> Luna, reviews -> Sol). Sol defaults to `high`; export `TRIP_WORKFLOW_TIER=HIGH` for `xhigh` high-risk review, or use `CODEX_MODEL` / `CODEX_EFFORT` per run.
+- Explicit review flow selects centralized Sol defaults: `high` below HIGH and mandatory `xhigh` for HIGH final review.
 - `--sandbox read-only`. Safe to invoke autonomously.
 - Thread IDs persisted per-target (no `--last`). Concurrent reviews don't collide.
 - Separate `STATE_DIR` from `codex-plan-review` — same key is fine.
 - Extra context -> `{{EXTRA_PROMPT}}`. Keep short.
-- Live output shows lifecycle, commands, file changes, and errors without dumping raw JSON. Shared `set -o pipefail` preserves non-zero Codex and pipeline status.
+- Live output shows lifecycle, commands, file changes, and errors without dumping raw JSON. `pipefail` covers Codex, JSONL logging, and parser failures; stderr process-substitution status is not claimed.
 
 ## Loop Shape
 

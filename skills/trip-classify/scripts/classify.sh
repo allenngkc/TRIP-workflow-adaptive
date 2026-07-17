@@ -63,7 +63,8 @@ if has_signal 'authenticat|authoriz|oauth|access[[:space:]-]+control|credential|
 elif has_signal 'payment|billing|financial|money|invoice'; then
     base_tier="HIGH"
     reason="Payment or financial logic requires the high-risk safety gates."
-elif has_signal 'database[[:space:]-]+migration|schema[[:space:]-]+migration|migrat(e|ion)|data[[:space:]-]+loss|destructive[[:space:]-]+data|drop[[:space:]]+(table|column)|delete[[:space:]-]+data'; then
+elif (has_signal 'migrat(e|ion)' && has_signal 'database|schema|data|persistence|storage|table|column|index|backfill') \
+    || has_signal 'data[[:space:]-]+loss|destructive[[:space:]-]+data|drop[[:space:]]+(table|column)|delete[[:space:]-]+data'; then
     base_tier="HIGH"
     reason="Migration, destructive persistence, or data-loss risk requires the high-risk safety gates."
 elif has_signal 'security[[:space:]-]+sensitive|vulnerab|secret|cryptograph|permission[[:space:]-]+boundary'; then
@@ -75,7 +76,7 @@ elif has_signal 'concurren|race[[:space:]-]+condition|distributed[[:space:]-]+sy
 elif has_signal 'major[[:space:]-]+architect|public[[:space:]-]+api[[:space:]-]+compat|breaking[[:space:]-]+api|cross[[:space:]-]+cutting[[:space:]-]+refactor'; then
     base_tier="HIGH"
     reason="Major architecture or public compatibility impact requires the high-risk safety gates."
-elif has_signal 'multi[[:space:]-]+file|new[[:space:]-]+feature|api[[:space:]-]+endpoint|business[[:space:]-]+logic|meaningful[[:space:]-]+refactor|external[[:space:]-]+integration|large[[:space:]-]+repetitive|mechanical[[:space:]-]+rename|across[[:space:]]+(many|multiple)[[:space:]]+files'; then
+elif has_signal 'migrat(e|ion)|multi[[:space:]-]+file|new[[:space:]-]+feature|api[[:space:]-]+endpoint|business[[:space:]-]+logic|meaningful[[:space:]-]+refactor|external[[:space:]-]+integration|large[[:space:]-]+repetitive|mechanical[[:space:]-]+rename|across[[:space:]]+(many|multiple)[[:space:]]+files'; then
     base_tier="MEDIUM"
     reason="Multi-file or meaningful implementation work needs planning and tests without identified high-risk impact."
 fi
@@ -173,8 +174,35 @@ if $skip_release; then
     override_note="${override_note}Release was explicitly skipped."
 fi
 
+plan_detail="NONE"
+if $planning; then
+    case "$tier" in
+        SMALL) plan_detail="LIGHTWEIGHT" ;;
+        MEDIUM) plan_detail="FOCUSED" ;;
+        HIGH) plan_detail="DETAILED" ;;
+    esac
+fi
+
+case "$tier" in
+    SMALL) implementation_effort="medium" ;;
+    MEDIUM|HIGH) implementation_effort="high" ;;
+esac
+if $plan_review || $final_review; then
+    if [ "$tier" = "HIGH" ]; then
+        review_effort="xhigh"
+    else
+        review_effort="high"
+    fi
+else
+    review_effort="not scheduled"
+fi
+
 echo "Workflow tier: $tier"
 echo "Reason: $reason"
+echo "Plan detail: $plan_detail"
+echo "Execution profile:"
+echo "- Luna implementation: $implementation_effort"
+echo "- Sol review: $review_effort"
 if [ -n "$override_note" ]; then
     echo "Override notes: $override_note"
 fi

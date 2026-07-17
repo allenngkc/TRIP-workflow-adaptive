@@ -12,6 +12,7 @@ esac
 trap 'rm -rf -- "$TMP_TEST"' EXIT
 
 export STATE_DIR="$TMP_TEST/state"
+export CODEX_FLOW=review
 # shellcheck source=../skills/codex-plan-review/scripts/_common.sh
 source "$ROOT/skills/codex-plan-review/scripts/_common.sh"
 
@@ -102,5 +103,22 @@ set -e
     || fail "pipefail hid command failure (expected 7, got $failure_rc)"
 grep -Fqx '[codex] turn failed: simulated failure' "$TMP_TEST/failure.progress" \
     || fail "failure event was not displayed"
+
+emit_invalid_json() {
+    printf '%s\n' '{not-json}'
+}
+
+set +e
+run_codex_with_progress \
+    "$TMP_TEST/parser.events.ndjson" "$TMP_TEST/parser.stderr" \
+    "$TMP_TEST/parser.thread" truncate emit_invalid_json \
+    >"$TMP_TEST/parser.progress" 2>"$TMP_TEST/parser.error"
+parser_rc=$?
+set -e
+
+[ "$parser_rc" -ne 0 ] \
+    || fail "parser failure was hidden by the pipeline"
+grep -Fq '[codex] progress parser error:' "$TMP_TEST/parser.error" \
+    || fail "parser failure was not reported"
 
 echo "codex progress streaming: PASS"
