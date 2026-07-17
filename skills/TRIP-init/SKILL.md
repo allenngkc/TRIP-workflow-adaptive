@@ -475,6 +475,8 @@ After user validation, update the other TRIP skill files based on the **actual c
 4. **`TRIP-review`** - `checklist.md` and `cr-template.md` adapted to actual architecture
 5. **`TRIP-test`** - Test commands, structure, priorities
 
+`trip-classify` is a shared pure-workflow skill. Keep its risk rules intact; it has no project placeholders to expand.
+
 ---
 
 ### 6.1 Universal Updates (ALL skills)
@@ -1021,6 +1023,7 @@ Update: Technology Stack, and any affected architectural sections
   - [ ] `TRIP-review/cr-template.md`: Checklist section names updated to match adapted `checklist.md`
   - [ ] `TRIP-test`: `[TEST_COMMAND_*]` placeholders replaced with actual commands
   - [ ] `TRIP-test`: `[ADAPT_TO_PROJECT]` markers replaced with actual test structure/priorities
+  - [ ] `trip-classify`: present and unchanged except for intentional workflow-policy customization
 - [ ] changelog_table.md initialized with version+1 (Phase 7)
 - [ ] TESTING.md created, adapted to actual test setup (Phase 7)
 - [ ] ARCHI-rules.md created, referencing actual ARCHI sections (Phase 7)

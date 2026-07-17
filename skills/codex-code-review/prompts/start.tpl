@@ -11,12 +11,19 @@ To see the change set:
 
 If `git diff HEAD` returns nothing (already committed), use `git diff @{u}...HEAD` or `git log --reverse main..HEAD`.
 
-## Prerequisites — read first
+## Context boundary
 
-1. `docs/ARCHI.md`
-2. `.claude/skills/TRIP-review/checklist.md` — single source of truth for the review checklist, severity classification, and approval gate. Do NOT read `.claude/skills/TRIP-review/SKILL.md`.
-3. Plan file `{{TARGET}}` if it's a path.
-4. Corresponding changelog in `docs/2-changelog/` if present.
+Read only what the review needs, in this order:
+
+1. `docs/ARCHI.md`, when present
+2. `AGENTS.md` or `CLAUDE.md`, when present
+3. The active task or frozen plan `{{TARGET}}`
+4. Source files directly relevant to the diff
+5. Tests directly relevant to the diff
+
+Also read `.claude/skills/TRIP-review/checklist.md`, the workflow's single source of review
+criteria and severity. Do NOT read `.claude/skills/TRIP-review/SKILL.md`. Do not recursively read
+Markdown, unrelated changelogs, or the full repository.
 
 ## Review priorities (in order)
 
@@ -24,6 +31,7 @@ If `git diff HEAD` returns nothing (already committed), use `git diff @{u}...HEA
 2. **Security / safety** — unhandled errors that crash the app, stale state that corrupts output.
 3. **Plan conformance** — does the code do what the plan says? Missing steps, wrong data flow?
 4. **Practical concerns** — performance on real inputs, error messages the user can act on, graceful degradation.
+5. **Architecture memory** — if the diff changes architecture, `docs/ARCHI.md` changes with it.
 
 ## NOT priorities — do not flag these
 

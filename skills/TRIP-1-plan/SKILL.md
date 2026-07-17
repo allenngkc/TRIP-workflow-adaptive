@@ -1,244 +1,172 @@
 ---
 name: TRIP-1-plan
-description: Plan a new feature following project standards
-argument-hint: "describe the feature you want to build"
+description: Classify and plan a change using the adaptive TRIP workflow
+argument-hint: "describe the feature or change"
 ---
 
-# Planning Mode
+# Adaptive Planning Mode
 
-You are now in **planning mode** for **[PROJECT_NAME]**.
+You are planning work for **[PROJECT_NAME]**. Classification comes before discovery, planning, or delegation.
 
-## Prerequisites - Read First
+## Step 0: Classify and route
 
-Before creating any plan, you MUST read ALL THE LINES of:
+Use `.claude/skills/trip-classify/SKILL.md` to classify `$ARGUMENTS`. Inspect only:
 
-1. @docs/ARCHI.md - Understand current system architecture
+1. `docs/ARCHI.md`, when present
+2. `AGENTS.md` or `CLAUDE.md`, when present
+3. The active request
+4. Source files directly relevant to estimating the change
+5. Tests directly relevant to estimating verification
 
-## Your Task
+Do not recursively read Markdown or ingest the full repository. Print the classifier's `Workflow tier`, `Reason`, enabled stages, skipped stages, and any override notes before continuing.
 
-Plan the following feature: $ARGUMENTS
+- **SMALL**: skip the plan document and continue directly with `TRIP-2-implement`, carrying the classification and original request.
+- **MEDIUM**: write a focused implementation plan. Skip requirements grilling, Sol plan review, and mandatory user approval unless an override enables them.
+- **HIGH**: conduct requirements discovery, write a detailed frozen plan, run a fresh Sol plan review, and obtain user approval when user input is available.
+- **`full trip`**: enable the complete original ceremony regardless of the underlying risk label.
 
----
+Never downgrade HIGH because the user requested `tier: small`, `tier: medium`, `skip sol review`, or `budget mode`. Explain the promotion.
 
-## Step 1: Discovery & Clarification (Interactive)
+## Step 1: Discovery and clarification
 
-**Do NOT start writing a plan immediately.** First, engage in a discovery conversation to fully understand the user's intent.
+### SMALL
 
-### 1.1 Initial Understanding
+Skip discovery unless one answer is genuinely blocking safe implementation.
 
-After reading the feature request, summarize your understanding in 2-3 sentences, then **use the `AskUserQuestion` tool** to present clarifying questions with structured options.
+### MEDIUM
 
-Frame questions around:
+Summarize the intended behavior and proceed from reasonable assumptions. Ask a concise question only for a blocking ambiguity that cannot be resolved from the repository. Do not run an extended requirements interview.
 
-- **Scope**: What's included vs excluded?
-- **Behavior**: How should it work from the user's perspective?
-- **Constraints**: Any technical limitations, deadlines, or dependencies?
-- **Priority**: What's most important if trade-offs are needed?
+### HIGH
 
-For each question, provide 2-4 concrete options based on your analysis of the codebase and the feature request. Always let the user provide custom input via the built-in "Other" option.
+Before writing the plan, summarize your understanding and use `AskUserQuestion` to resolve expensive ambiguity around scope, observable behavior, constraints, compatibility, safety, migration/rollback, and acceptance criteria.
 
-After the user answers, proceed **directly to writing the plan** (Step 2) — no approach-confirmation question. Ask a follow-up round with `AskUserQuestion` only if a blocking ambiguity remains (**maximum 3 rounds total**; if still unclear, summarize what you know and proceed with noted assumptions).
+Ask only decision-relevant questions with concrete options. Continue until the contract is sufficiently clear, up to three rounds. If material ambiguity remains, stop and surface it; do not freeze an unsafe plan.
 
----
+## Step 2: Create the plan
 
-## Step 2: Plan Document Creation
+For MEDIUM or HIGH, propose a SemVer version and create:
 
-Once understanding is confirmed, create the plan document.
-
-### File Naming
-
-Depending on the feature (major, minor, patch), propose a new version using SemVer (x.y.z) and create:
 `docs/1-plans/F_[version]_[feature-name].plan.md`
 
-### Required Sections
+Place the classification immediately after the plan title so implementation inherits the route:
 
 ```markdown
 # [Feature Name] Implementation Plan
 
+## Workflow Classification
+
+Workflow tier: MEDIUM
+Reason: [concise risk/complexity judgment]
+Stages enabled: [comma-separated stages]
+Stages skipped: [comma-separated stages]
+Override notes: [only when applicable]
+```
+
+Then use these sections:
+
+```markdown
 ## Overview
 
-[2-4 sentences describing the feature and its purpose]
+[Purpose and observable result]
 
-## Problem Statement (if applicable)
+## Problem Statement
 
-[Current limitations/issues this feature addresses]
+[Current limitation, when useful]
 
 ## Solution Architecture
 
-[High-level design approach]
+[Design and data flow. For MEDIUM, keep this concise.]
 
 ## Implementation Details
 
-### 1. [Component/Module/File Name]
+### 1. [Component or file]
 
 **File**: `path/to/file`
 
-[Detailed description of changes needed]
-
-**Current state** (if modifying existing):
-[Describe what currently exists]
-
 **Modifications**:
 
-- Specific change 1 (around line X)
-- Specific change 2 (around line Y)
-
-### 2. [Next Component/Module/File]
-
-[Continue with same pattern]
+- Specific change
+- Error/edge behavior
 
 ## Technical Considerations
 
-[ADAPT_TO_PROJECT: Replace with project-specific technical concerns during Init]
+[ADAPT_TO_PROJECT: Replace with project-specific concerns during Init]
 
-- **Pattern Usage**: Which existing patterns to follow (from ARCHI.md)
-- **[Concern 1]**: [Description]
-- **[Concern 2]**: [Description]
-- **Edge Cases**: [Relevant edge cases for this feature]
+- **Pattern Usage**: Existing patterns to follow
+- **Risk and reversibility**: Failure modes and rollback
+- **Compatibility**: Public or internal contracts
+- **Architecture memory**: If architecture changes, update `docs/ARCHI.md` in the same implementation
 
 ## Files to Modify/Create
 
-[Comprehensive numbered list with purposes]
-
-1. `path/to/file1` (modify) - Purpose description
-2. `path/to/file2` (new) - Purpose description
-
-## Type Definitions (if applicable)
-
-[New types, interfaces, structs, or modifications to existing ones]
-
-## Performance & Cost Impact (if applicable)
-
-[Expected performance implications]
-
-## Backward Compatibility (if applicable)
-
-[Migration strategy if needed]
+1. `path/to/file` (modify) - purpose
 
 ## Test Impact
 
-[2-5 bullets: which existing tests the change affects, what new logic will need tests, whether an integration/E2E check applies. No test code — the TRIP-2 testing gate consumes this section.]
+- Existing affected tests and relevant commands
+- New behavior that needs tests
+- Integration/E2E or manual verification required
 
 ## To-dos
 
-### Phase 1: [Phase Name] (if multiple phases are needed) or simply skip title if only one phase is needed
-
-- [ ] Task description
-- [ ] Another task
-
-### Phase 2: [Phase Name] (if applicable)
-
-- [ ] Task description
-- [ ] Another task
-
-**Note**: For simple plans, a single phase is sufficient. Split into multiple phases only for complex features requiring sequential implementation.
-
-**Note**: Do NOT write test code during planning — the Test Impact section above only names what the TRIP-2 testing gate will run and author.
+- [ ] Implementation task
+- [ ] Tests and verification
+- [ ] Update `docs/ARCHI.md` if architecture changes
 ```
 
-## Quality Standards
+MEDIUM plans may omit inapplicable sections and normally use one phase. HIGH plans must be detailed enough that Luna can implement without guessing; include migration/rollback, compatibility, security boundaries, failure behavior, and phased ordering when relevant.
 
-- **Zero Ambiguity**: Every step must be clear and actionable
-- **File-Level Specificity**: List exact files and functions to modify
-- **Architecture Alignment**: Must conform to existing patterns in ARCHI.md
-- **Risk Assessment**: Highlight potential failure points
+Do not write implementation code or test code during planning.
 
----
+## Step 3: Sol plan review
 
-## Step 3: Codex Second-Opinion Review
+Run this stage only for HIGH, `include sol plan review`, `maximum review`, or `full trip`. MEDIUM skips it by default; SMALL has no plan to review.
 
-Before the user sees the plan, run the Codex plan review loop.
+Use a **fresh**, read-only Sol thread. Set the classification for centralized effort selection:
 
-### Confirm
+```bash
+export STATE_DIR=".claude/skills/codex-plan-review/state"
+export TRIP_WORKFLOW_TIER="<SMALL|MEDIUM|HIGH>"
+bash .claude/skills/codex-plan-review/scripts/reset.sh <plan-path>
+bash .claude/skills/codex-plan-review/scripts/start.sh \
+    --prompt-file .claude/skills/codex-plan-review/prompts/start.tpl \
+    <plan-path>
+```
 
-`AskUserQuestion`: "I'll run Codex as a second-opinion reviewer and iterate until clean. Proceed?"
-Options: "Yes, run Codex review" (recommended) / "Skip Codex, go to user review" / "Cap iterations at N"
+The reset is only for the start of this workflow; resume the same fresh thread for review iterations.
 
-Skip for trivial plans (single-file, low-risk). Run for non-trivial (new module, schema/algorithm change).
+Parse the trailing tag:
 
-### Loop
+- `APPROVED`: freeze the plan.
+- `REQUEST_CHANGES`: critically assess each P1/P2, fix valid findings, document pushback, and resume.
+- `NEEDS_REWORK`: surface the structural issue before rewriting.
 
-1. **Start**: `bash .claude/skills/codex-plan-review/scripts/start.sh --prompt-file .claude/skills/codex-plan-review/prompts/start.tpl <plan-path>`
-2. **Parse trailing tag**: `APPROVED` -> Step 4. `NEEDS_REWORK` -> surface to user. `REQUEST_CHANGES` -> continue.
-3. **Address findings critically** — quote each P1/P2, push back on incorrect ones, fix legitimate ones by editing the plan in place.
-4. **Write implementer notes** (1-3 sentences): which findings you fixed, which you pushed back on and why, any user decisions that override existing docs or environment limitations that can't be resolved in the plan.
-5. **Resume** with notes:
-   ```bash
-   bash .claude/skills/codex-plan-review/scripts/resume.sh \
-       --prompt-file .claude/skills/codex-plan-review/prompts/resume.tpl \
-       --notes "Fixed X. Pushed back on Y because Z. User decided W." \
-       <plan-path>
-   ```
-   -> back to step 2.
-6. **Cap at 5 rounds** (or user-specified). Surface remaining findings and let user decide.
+Resume with concise implementer notes:
 
-Surface Codex reviews verbatim. Keep edits scoped to findings. Reset thread (`reset.sh <plan-path>`) only if context is genuinely confused.
+```bash
+bash .claude/skills/codex-plan-review/scripts/resume.sh \
+    --prompt-file .claude/skills/codex-plan-review/prompts/resume.tpl \
+    --notes "Fixed X. Pushed back on Y because Z." \
+    <plan-path>
+```
 
----
+Cap at five rounds unless the user set another limit. Sol is an independent reviewer, never the plan author or implementer. Routine Sol review uses `high`; HIGH classification selects `xhigh` centrally.
 
-## Step 4: User Review & Validation
+## Step 4: Freeze and hand off
 
-After Codex review converges (or is skipped), present a summary to the user including:
+Present the feature, approach, key files, workflow tier, enabled/skipped stages, and Sol status.
 
-- **Feature**: [name]
-- **Approach**: [1-2 sentences]
-- **Files affected**: [count] files ([list key ones])
-- **Estimated complexity**: [simple/moderate/complex]
-- **Codex status**: [APPROVED / skipped / capped at N rounds with open findings]
+- **HIGH**: use `AskUserQuestion` to request approval of the frozen plan. Do not implement until the user approves when input is available.
+- **MEDIUM**: user approval is optional. If the user requested planning only, stop after presenting the plan. If the active request already authorizes implementation, continue directly to `TRIP-2-implement` with the plan.
+- **SMALL**: no plan approval; hand the original task and classification directly to `TRIP-2-implement`.
+- **Full TRIP**: preserve the original explicit user-approval gate.
 
-Then **use the `AskUserQuestion` tool** to collect feedback:
-
-- **Question**: "Please review the plan at `docs/1-plans/F_x.y.z_feature-name.plan.md`. How would you like to proceed?"
-- **Options**: "Approved" (ready for implementation), "Request changes" (I have modifications), "Needs rework" (significant issues to address)
-
-Handle feedback:
-
-- **If "Request changes"**: Update the plan and re-present. Run another Codex pass if changes are substantive.
-- **If "Needs rework"**: Discuss issues, rework the plan, and re-present.
-- **If "Other" (custom input)**: Handle accordingly.
-- **If "Approved"**: **Use the `AskUserQuestion` tool** to ask:
-  - **Question**: "Plan approved. Would you like to start implementation now?"
-  - **Options**: "Yes, implement now" (proceed with `TRIP-2-implement` using this plan), "Not yet" (I'll implement later)
-
----
-
-## IMPORTANT: No Code Implementation
-
-**DO NOT write code snippets or implement anything during planning.**
-
-This is a high-level planning phase only. Your plan should describe:
-
-- WHAT needs to be done (features, changes, structures)
-- WHERE changes will happen (files, modules, functions)
-- WHY certain approaches are chosen (trade-offs, rationale)
-
-But NOT:
-
-- Actual code implementations
-- Detailed algorithm code
-
-Keep it architectural and descriptive. Code comes in the `TRIP-2-implement` phase.
+If the user changes scope materially after classification or approval, reclassify before delegation.
 
 ## [ADAPT_TO_PROJECT: Guidance Sections]
 
 <!--
-During Init, replace this section with project-specific guidance.
-Examples:
-
-For Web Frontend:
-## For New UI Components
-## For Service Layer Additions
-## For Custom Hooks
-
-For Embedded:
-## For New Peripheral Drivers
-## For New Communication Protocols
-
-For CLI:
-## For New Commands
-## For Configuration Changes
-
-For Backend:
-## For New API Endpoints
-## For Database Changes
+During Init, replace this block with guidance for the project's actual component types and patterns.
+Keep it curated and derived from ARCHI.md; do not turn it into a repository dump.
 -->

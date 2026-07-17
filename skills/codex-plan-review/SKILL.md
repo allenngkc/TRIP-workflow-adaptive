@@ -6,7 +6,7 @@ argument-hint: "<plan-path> [extra context] | reset <plan-path> | show <plan-pat
 
 # Codex Plan Review
 
-Iterative review of a planning document via Codex CLI. State (thread ID, review text, event log) persisted under `.claude/skills/codex-plan-review/state/<sanitized-path>.{thread,review.txt,events.ndjson}`.
+Iterative review of a planning document via Codex CLI. State (thread ID, review text, complete JSONL event log, and stderr log) persists under `.claude/skills/codex-plan-review/state/<sanitized-path>.*`. Start and resume print concise progress live; resumed events append to the same log.
 
 The companion `codex-code-review` skill shares the same scripts with its own prompt templates and `STATE_DIR`.
 
@@ -35,10 +35,11 @@ The companion `codex-code-review` skill shares the same scripts with its own pro
 
 ## Notes
 
-- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation → gpt-5.6-luna, plan/code review → gpt-5.6-sol, effort xhigh; derived from `STATE_DIR`). Adjust that one file to your preferred models, or override per run via `CODEX_MODEL` / `CODEX_EFFORT` env vars; the scripts echo the effective values.
+- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation -> Luna, plan/code review -> Sol). Sol defaults to `high`; export `TRIP_WORKFLOW_TIER=HIGH` for centralized `xhigh` high-risk review, or override a run with `CODEX_MODEL` / `CODEX_EFFORT`.
 - `--sandbox read-only`. Safe to invoke autonomously.
 - On network failure, check `*.events.ndjson.stderr`. Run `reset.sh` and retry.
 - Thread IDs persisted per-plan (no `--last`). Concurrent reviews don't collide.
+- Session/turn, command, file-change, and error events appear live without printing raw JSON. `set -o pipefail` preserves Codex, `tee`, or parser failures.
 - Extra context -> `{{EXTRA_PROMPT}}`. Keep short.
 
 ## Loop Shape

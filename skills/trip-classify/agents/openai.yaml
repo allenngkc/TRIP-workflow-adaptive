@@ -1,0 +1,4 @@
+interface:
+  display_name: "TRIP Classifier"
+  short_description: "Route changes by complexity and risk"
+  default_prompt: "Use $trip-classify to classify this task and show the enabled and skipped TRIP stages."

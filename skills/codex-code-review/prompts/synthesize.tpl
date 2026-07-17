@@ -18,6 +18,9 @@ Fill-in guide:
 
 Output only the rendered markdown — no preamble or commentary.
 
+Do not broaden repository context during synthesis; use the existing thread, current diff, and
+the review template only.
+
 ## Sentinel
 
 After the review, on its own line: `PROMOTION_READY`

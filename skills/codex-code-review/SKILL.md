@@ -10,7 +10,7 @@ Iterative code review via Codex CLI on uncommitted changes. Codex reads the plan
 
 Review output stays in `state/<key>.review.txt` — not `docs/3-code-review/`. Promotion to `docs/3-code-review/CR_wa_vx.y.z.md` happens after convergence, not per-turn.
 
-State persisted under `.claude/skills/codex-code-review/state/<sanitized-target>.{thread,review.txt,events.ndjson}`. Shared scripts live under `.claude/skills/codex-plan-review/scripts/`; always export before invoking:
+State persists under `.claude/skills/codex-code-review/state/<sanitized-target>.{thread,review.txt,events.ndjson}` with a companion stderr log. Full events are saved while concise progress is shown live; resume turns append. Shared scripts live under `.claude/skills/codex-plan-review/scripts/`; always export before invoking:
 
 ```bash
 export STATE_DIR=".claude/skills/codex-code-review/state"
@@ -47,16 +47,18 @@ Codex uses `git status -s` / `git diff HEAD` in read-only sandbox. If those fail
 
 ## After Convergence
 
-1. Promote `state/<key>.review.txt` to `docs/3-code-review/CR_wa_vx.y.z.md` using `.claude/skills/TRIP-review/cr-template.md`.
-2. Continue with `TRIP-3-release`.
+1. Leave the converged/synthesized review in `state/<key>.review.txt`.
+2. Promote it to `docs/3-code-review/CR_wa_vx.y.z.md` only if the adaptive route enables release.
+3. Continue with `TRIP-3-release` only when release was explicitly requested or `full trip` is active.
 
 ## Notes
 
-- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation → gpt-5.6-luna, plan/code review → gpt-5.6-sol, effort xhigh; derived from `STATE_DIR`). Adjust that one file to your preferred models, or override per run via `CODEX_MODEL` / `CODEX_EFFORT` env vars; the scripts echo the effective values.
+- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation -> Luna, reviews -> Sol). Sol defaults to `high`; export `TRIP_WORKFLOW_TIER=HIGH` for `xhigh` high-risk review, or use `CODEX_MODEL` / `CODEX_EFFORT` per run.
 - `--sandbox read-only`. Safe to invoke autonomously.
 - Thread IDs persisted per-target (no `--last`). Concurrent reviews don't collide.
 - Separate `STATE_DIR` from `codex-plan-review` — same key is fine.
 - Extra context -> `{{EXTRA_PROMPT}}`. Keep short.
+- Live output shows lifecycle, commands, file changes, and errors without dumping raw JSON. Shared `set -o pipefail` preserves non-zero Codex and pipeline status.
 
 ## Loop Shape
 
@@ -65,5 +67,5 @@ turn 1: start.sh -> REQUEST_CHANGES (Critical: A, Major: B C)
          address A B C
 turn 2: resume.sh -> REQUEST_CHANGES (A B addressed, Minor: C partial, Suggestion: D)
          address C, optionally D
-turn 3: resume.sh -> APPROVED -> promote, continue with TRIP-3-release
+turn 3: resume.sh -> APPROVED -> retain review state; release only when enabled
 ```

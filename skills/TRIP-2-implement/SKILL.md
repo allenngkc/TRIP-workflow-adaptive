@@ -1,195 +1,126 @@
 ---
 name: TRIP-2-implement
-description: Implement a feature following TRIP plan
-argument-hint: "plan file or feature to implement"
+description: Implement and verify a change using its adaptive TRIP classification
+argument-hint: "plan file or change to implement"
 ---
 
-# Implementation Mode
+# Adaptive Implementation Mode
 
-You are now in **implementation mode** for **[PROJECT_NAME]**.
+Implement `$ARGUMENTS` for **[PROJECT_NAME]** using the least orchestration that is safe.
 
-## Prerequisites - Read First
+## Step 0: Load or create the classification
 
-Before implementing, you MUST read ALL THE LINES of:
+Reuse the `Workflow Classification` from the active plan or handoff. If none exists, use `.claude/skills/trip-classify/SKILL.md` before delegating.
 
-1. @docs/ARCHI.md - Understand current system architecture
+Read only:
 
-## Your Task
+1. `docs/ARCHI.md`, when present
+2. `AGENTS.md` or `CLAUDE.md`, when present
+3. The active task or frozen plan
+4. Directly relevant source files
+5. Directly relevant tests
 
-Implement: $ARGUMENTS
+Do not recursively read Markdown or ingest the full repository. Print the routing decision. If a direct invocation classifies as MEDIUM or HIGH but has no plan, return to `TRIP-1-plan` to create the required plan before delegation.
 
----
+## Step 1: Decide branch scope
 
-## Step 0: Create a Branch (Pre-Implementation)
+Create a dedicated `feat/` or `fix/` branch when release is enabled, the task is HIGH, or the user requests isolation. SMALL and MEDIUM work may stay on the current branch when release is skipped. Never overwrite unrelated working-tree changes.
 
-**Always** create a dedicated branch before implementing — no need to ask. `TRIP-3-release` merges it back into the main branch with fast-forward, keeping a single clean linear history.
+## Step 2: Luna implementation
+
+Luna implements every tier. Do not use Sol for implementation.
+
+For a fresh session:
 
 ```bash
-git checkout -b feat/[short-description]   # or fix/[short-description]
+bash .claude/skills/codex-implement/scripts/start.sh \
+    --prompt-file .claude/skills/codex-implement/prompts/implement.tpl \
+    <plan-path-or-label> "<classification plus any scope limit>"
 ```
 
-Derive the short description from the plan/feature name. If already on a dedicated branch for this work (e.g., resuming a session), continue on it.
-
----
-
-## Implementation Phase — Delegate to Codex
-
-You do NOT write the implementation yourself — delegate it to Codex via the `codex-implement` skill. (Exception: trivial unplanned changes of a few lines may be done directly.)
-
-1. Read the plan fully and decide the delegation scope: the whole plan, or one phase at a time for multi-phase plans.
-
-2. **Start** the implementation session (state dir is handled by the script):
-
-   ```bash
-   bash .claude/skills/codex-implement/scripts/start.sh \
-       --prompt-file .claude/skills/codex-implement/prompts/implement.tpl \
-       <plan-path> "Implement Phase 1 only"   # instructions optional — omit to implement the whole plan
-   ```
-
-   Follow-up phases resume the same thread (context retained):
-
-   ```bash
-   export STATE_DIR=".claude/skills/codex-implement/state"
-   bash .claude/skills/codex-plan-review/scripts/resume.sh \
-       --prompt-file .claude/skills/codex-implement/prompts/continue.tpl \
-       <plan-path> "Now implement Phase 2"
-   ```
-
-3. **Parse the trailing tag** of the report:
-   - `IMPLEMENTATION_COMPLETE` → proceed to Self-Review below.
-   - `IMPLEMENTATION_PARTIAL` → read the report; resume with instructions for the remainder, or finish small leftovers yourself during Self-Review.
-
-For phased delegation, run the Delegate → Self-Review cycle per phase; the testing gate and Codex code review run once, after the last phase.
-
----
-
-## Self-Review & Fix
-
-After Codex reports, review the implementation yourself before anything else:
-
-- Read the full diff (`git status -s`, `git diff HEAD`) against the plan, ARCHI.md patterns, and project conventions (DRY, KISS, comment discipline, error-handling and naming conventions from ARCHI.md).
-- Fix any problem **directly yourself** — no back-and-forth with Codex over fixes. Resume the codex-implement thread only for genuinely new scope (e.g., the next phase).
-- Verify the plan checkboxes Codex ticked match what the diff actually contains; cross any it completed but missed.
-
-Proceed to the testing gate once you consider the implementation good for review.
-
----
-
-## Testing Gate
-
-After implementation, before the Codex review loop. Any failure here blocks the loop from starting.
-
-### 1. Lint, type-check & build
+For later phases, retain the Luna thread:
 
 ```bash
-# [ADAPT_TO_PROJECT: Replace with actual lint/type-check/build commands during Init]
+export STATE_DIR=".claude/skills/codex-implement/state"
+bash .claude/skills/codex-plan-review/scripts/resume.sh \
+    --prompt-file .claude/skills/codex-implement/prompts/continue.tpl \
+    <plan-path-or-label> "Now implement Phase 2"
+```
+
+The launcher must use `--sandbox workspace-write`, never unrestricted execution or `--yolo`. Parse `IMPLEMENTATION_COMPLETE` / `IMPLEMENTATION_PARTIAL`; resume only for a real next phase or substantial unfinished scope.
+
+## Step 3: Fable diff review and fixes
+
+After Luna reports:
+
+- Inspect `git status -s` and the complete `git diff HEAD` against the task/plan and the classification.
+- Read the changed source and directly relevant tests; do not reread unrelated documentation.
+- Fix valid problems directly as Fable. Do not ping-pong routine fixes back to Luna.
+- Verify completed plan checkboxes against the actual diff.
+- If the implementation changes architecture, update `docs/ARCHI.md` in this same change and keep it curated.
+
+## Step 4: Tier-aware verification
+
+Verification is mandatory at every tier; breadth changes with risk.
+
+### SMALL
+
+Run the narrowest relevant lint/build/test or manual check. A copy-only change may need only a targeted build/lint or rendered check. Do not run the full suite by default.
+
+### MEDIUM
+
+Run relevant lint, type-check/build, and affected tests. Add or update tests for new business logic and observable behavior. Exercise an affected API/UI/integration contract when applicable.
+
+### HIGH
+
+Run the MEDIUM gate plus risk-focused behavioral tests and rollback/failure-path checks for the high-risk property. Authentication, destructive data, persistence, payments, security, concurrency, and public API behavior require at least one behavioral or integration verification; coverage debt cannot replace it.
+
+Use the project commands inserted by `TRIP-init`:
+
+```bash
+# [ADAPT_TO_PROJECT: Replace with actual commands during Init]
 [LINT_COMMAND] 2>&1 | tee /tmp/_trip2-lint.txt
 [TYPECHECK_COMMAND] 2>&1 | tee /tmp/_trip2-typecheck.txt
-```
-
-### 2. Run affected unit tests
-
-```bash
 [TEST_COMMAND] <pattern-for-affected-files>
 ```
 
-Only the files/areas the change touched — never the full suite by default.
+Apply the `TRIP-test` seam ladder for hard-to-test code. Never hide code from coverage or lower a gate. Summarize: `lint: clean | typecheck: clean | tests: N passed (M new) | manual: ...`.
 
-### 3. Integration impact check
+Fix failures before any Sol review.
 
-<!-- [ADAPT_TO_PROJECT: During Init, replace with the project's integration/E2E impact rules — e.g. "if selectors changed, run the E2E suite" or "if an API contract changed, exercise it against the local server/emulator". Docs-only changes skip this.] -->
+## Step 5: Conditional Sol final review
 
-If the change modifies an externally observable contract (API shape, UI selectors, auth behavior), exercise it with the project's integration/E2E tooling. Docs-only changes skip this.
+- **SMALL**: skip Sol.
+- **MEDIUM**: run one fresh Sol final code-review thread by default.
+- **HIGH**: a fresh Sol final review is mandatory.
+- **Overrides**: `skip sol review` and `budget mode` may skip MEDIUM Sol review. They cannot remove HIGH review. `maximum review` and `full trip` enable it.
 
-### 4. Author missing tests
-
-If the change adds new logic, write its tests **now**, guided by the plan's **Test Impact** section and the project's testing guide (see `TRIP-test`). If no new logic was added, skip this step.
-
-**Hard-to-cover code policy:**
-
-- Test **observable behavior** (inputs → outputs/persisted effects), never internal wiring.
-- **Mock-pain tripwire**: if the mock setup grows longer than the test's assertions, stop fighting it — check the project's testing guide for a seam recipe; if none applies, skip the *deep unit* test and add one line to `docs/4-unit-tests/COVERAGE-DEBT.md` (`path | why hard | escape plan`).
-- **Critical-path floor**: behavior touching auth, deletion, persistence, cost, or external request shape must keep at least one behavioral test or manual integration check — coverage debt may defer internal-path depth, never safety-critical behavior.
-- Never hide untested code (no coverage-ignore comments, no config exclusions, no lowering coverage gates). Legacy modules outside the change scope are not a feature blocker — but record newly encountered risky gaps in the ledger.
-
-### 5. Build the summary
-
-Format: `lint: clean | typecheck: clean | tests: N passed (M new)`
-
-Fix failures before starting the loop.
-
----
-
-## Codex Code Review
-
-Always run the Codex code review after the testing gate passes — no confirmation needed.
-
-### Loop
-
-Always export before invoking shared scripts:
+At the start of this workflow, reset stale code-review state so the reviewer is independent of any previous run; resume that new thread only for its finding-resolution loop:
 
 ```bash
 export STATE_DIR=".claude/skills/codex-code-review/state"
+export TRIP_WORKFLOW_TIER="<SMALL|MEDIUM|HIGH>"
+bash .claude/skills/codex-plan-review/scripts/reset.sh <plan-path-or-label>
+bash .claude/skills/codex-plan-review/scripts/start.sh \
+    --prompt-file .claude/skills/codex-code-review/prompts/start.tpl \
+    <plan-path-or-label> "$GATE_SUMMARY"
 ```
 
-1. **Start**:
-   ```bash
-   bash .claude/skills/codex-plan-review/scripts/start.sh \
-       --prompt-file .claude/skills/codex-code-review/prompts/start.tpl \
-       <plan-path> "$GATE_SUMMARY"
-   ```
-   `$GATE_SUMMARY` is the testing-gate summary (`lint | typecheck | tests`). For unplanned work (no `F_*.plan.md`), pass a free-form label instead of a plan path.
+Parse `APPROVED`, `REQUEST_CHANGES`, or `NEEDS_REWORK`. For findings:
 
-2. **Parse trailing tag**: `APPROVED` -> synthesize. `NEEDS_REWORK` -> surface to user. `REQUEST_CHANGES` -> continue.
+1. Surface each finding with `file:line`.
+2. Fable reads the code, fixes legitimate issues, and pushes back with evidence on invalid ones.
+3. Re-run relevant verification.
+4. Resume with concise notes and the new gate summary.
 
-3. **Address findings** — quote each with `file:line`, read the actual code, fix legitimate ones, push back on incorrect ones. Critical/Major block approval; Minor/Suggestion are case-by-case.
+Cap at five rounds unless overridden. Sol is read-only and independent. Default Sol effort is `high`; HIGH classification selects `xhigh` through `_common.sh`.
 
-4. **Write implementer notes** (1-3 sentences): which findings you fixed, which you pushed back on and why, any user decisions or environment limitations Codex should stop re-flagging.
+After multi-round convergence, use `synthesize.tpl` to create the promotion-ready review state. Skip synthesis when Sol was skipped or Turn 1 already contains the full review.
 
-5. **Resume** (re-run the testing gate first — lint, typecheck, affected tests — and build a fresh summary):
-   ```bash
-   bash .claude/skills/codex-plan-review/scripts/resume.sh \
-       --prompt-file .claude/skills/codex-code-review/prompts/resume.tpl \
-       --notes "Fixed X. Pushed back on Y because Z." \
-       <plan-path> "$GATE_SUMMARY"
-   ```
-   Loop to step 2.
+## Step 6: Finish or release
 
-6. **Cap at 5 rounds** (or user-specified). Surface remaining findings.
+Cross completed plan items and report implementation, verification, review status, and any limitations.
 
-### Synthesize
+Release is **not automatic** for SMALL or MEDIUM and is optional for HIGH. Invoke `TRIP-3-release` only when the classification enables Release, the user explicitly requests it, or the user directly invokes `/TRIP-3-release`. `full trip` enables release. `skip release` always leaves the verified change uncommitted and untagged for the user to inspect.
 
-Skip if loop converged on Turn 1 (state file already holds full review).
-
-Turn-N state files hold only that turn's delta. After multi-round convergence, produce a consolidated review:
-
-```bash
-bash .claude/skills/codex-plan-review/scripts/resume.sh \
-    --prompt-file .claude/skills/codex-code-review/prompts/synthesize.tpl \
-    <plan-path> "Today's date is YYYY-MM-DD"
-```
-
-Outputs `PROMOTION_READY` sentinel. `<x.y.z>` Version placeholder left unfilled (resolved during `TRIP-3-release`).
-
-Edge cases:
-- **Capped without APPROVED**: still synthesize; Codex notes open findings.
-- **User skipped Codex**: no synthesis. The CR is written manually during `TRIP-3-release`: "Code review skipped — trivial change."
-
-### Operating Notes
-
-Surface reviews verbatim. Keep edits scoped. If Codex repeats a finding, re-read carefully — you likely addressed an adjacent concern. Reset thread only if context is confused. The testing gate (lint, typecheck, affected tests) must pass before APPROVED.
-
----
-
-## Handoff to Release
-
-After Codex converges (or is skipped):
-
-- Cross the corresponding checkboxes in the plan todo list (if any)
-- Then **use the `AskUserQuestion` tool** to ask:
-  - **Question**: "Is the implementation complete?"
-  - **Options**: "Yes, everything is complete" (proceed to release), "No, there are remaining items" (continue working)
-
-**If "Yes"**: proceed directly into the release — read `.claude/skills/TRIP-3-release/SKILL.md` and follow it in this session, passing the same plan path (or feature label). The release skill owns everything from version bump to the fast-forward merge and push.
-
-**If "No"**: continue working, then repeat the sequence: testing gate → Codex review → this question.
+The release skill retains its own explicit approvals before commit, tag, merge, or push.

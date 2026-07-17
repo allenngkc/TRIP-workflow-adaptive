@@ -12,16 +12,32 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STATE_DIR
 mkdir -p "$STATE_DIR"
 
-# Model/effort per flow (single source of truth for all codex skills):
-# implementation runs Luna, reviews (plan + code) run Sol, effort xhigh.
-# Adjust these defaults to your preferred models.
-# CODEX_MODEL / CODEX_EFFORT act as per-run overrides.
+# Model/effort per flow (single source of truth for all Codex skills).
+# CODEX_MODEL / CODEX_EFFORT remain per-run overrides. HIGH classifications
+# select xhigh review effort when the orchestrator exports
+# TRIP_WORKFLOW_TIER=HIGH; routine reviews default to high.
+: "${CODEX_IMPLEMENT_MODEL_DEFAULT:=gpt-5.6-luna}"
+: "${CODEX_REVIEW_MODEL_DEFAULT:=gpt-5.6-sol}"
+: "${CODEX_IMPLEMENT_EFFORT_DEFAULT:=high}"
+: "${CODEX_REVIEW_EFFORT_DEFAULT:=high}"
+: "${CODEX_HIGH_RISK_EFFORT_DEFAULT:=xhigh}"
+
 case "$STATE_DIR" in
-    *codex-implement*) CODEX_MODEL="${CODEX_MODEL:-gpt-5.6-luna}" ;;
-    *)                 CODEX_MODEL="${CODEX_MODEL:-gpt-5.6-sol}" ;;
+    *codex-implement*)
+        CODEX_MODEL="${CODEX_MODEL:-$CODEX_IMPLEMENT_MODEL_DEFAULT}"
+        CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_IMPLEMENT_EFFORT_DEFAULT}"
+        ;;
+    *)
+        CODEX_MODEL="${CODEX_MODEL:-$CODEX_REVIEW_MODEL_DEFAULT}"
+        case "${TRIP_WORKFLOW_TIER:-}" in
+            HIGH|high) CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_HIGH_RISK_EFFORT_DEFAULT}" ;;
+            *)         CODEX_EFFORT="${CODEX_EFFORT:-$CODEX_REVIEW_EFFORT_DEFAULT}" ;;
+        esac
+        ;;
 esac
-CODEX_EFFORT="${CODEX_EFFORT:-xhigh}"
-export CODEX_MODEL CODEX_EFFORT
+export CODEX_MODEL CODEX_EFFORT CODEX_IMPLEMENT_MODEL_DEFAULT
+export CODEX_REVIEW_MODEL_DEFAULT CODEX_IMPLEMENT_EFFORT_DEFAULT
+export CODEX_REVIEW_EFFORT_DEFAULT CODEX_HIGH_RISK_EFFORT_DEFAULT
 
 # Derive a per-target key from a path-like string. For real paths we
 # resolve to absolute; for non-path targets (branch names, commit
@@ -55,6 +71,77 @@ review_file() {
 
 events_file() {
     printf '%s/%s.events.ndjson' "$STATE_DIR" "$(target_key "$1")"
+}
+
+# Use Python's standard library instead of requiring jq. Prefer python3 but
+# retain the Windows/Python launcher name used by some supported environments.
+run_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 "$@"
+    elif command -v python >/dev/null 2>&1; then
+        python "$@"
+    elif command -v py >/dev/null 2>&1; then
+        py -3 "$@"
+    else
+        echo "error: Python 3 is required for Codex JSONL progress parsing" >&2
+        return 127
+    fi
+}
+
+# Render compact progress and optionally persist a thread id as soon as its
+# event arrives. Agent messages stay in the final report file, not the terminal.
+render_codex_progress() {
+    local -a args=(-u "$SKILL_DIR/scripts/codex-progress.py")
+    if [ "$#" -gt 0 ] && [ -n "$1" ]; then
+        args+=(--thread-file "$1")
+    fi
+    run_python "${args[@]}"
+}
+
+capture_thread_from_events() {
+    local events="$1"
+    local destination="$2"
+    local thread_id
+    thread_id="$(run_python "$SKILL_DIR/scripts/codex-progress.py" --extract-thread "$events" 2>/dev/null)"
+    if [ -n "$thread_id" ]; then
+        printf '%s\n' "$thread_id" > "$destination"
+    fi
+}
+
+# Run a Codex command while saving complete JSONL/stderr and showing concise
+# progress. MODE is truncate for a fresh thread and append for resume turns.
+# set -o pipefail above ensures Codex, tee, and parser failures stay non-zero.
+run_codex_with_progress() {
+    if [ "$#" -lt 5 ]; then
+        echo "error: run_codex_with_progress requires events stderr thread mode command..." >&2
+        return 64
+    fi
+
+    local events="$1"
+    local stderr_file="$2"
+    local thread_destination="$3"
+    local mode="$4"
+    shift 4
+
+    local -a tee_args=()
+    case "$mode" in
+        truncate)
+            : > "$events"
+            : > "$stderr_file"
+            ;;
+        append)
+            tee_args=(-a)
+            ;;
+        *)
+            echo "error: progress stream mode must be truncate or append" >&2
+            return 64
+            ;;
+    esac
+
+    "$@" \
+        2> >(tee "${tee_args[@]}" "$stderr_file" >&2) \
+        | tee "${tee_args[@]}" "$events" \
+        | render_codex_progress "$thread_destination"
 }
 
 # Load a prompt template from $1 and substitute {{TARGET}} and

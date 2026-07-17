@@ -6,7 +6,7 @@
 
 A structured development workflow for AI coding agents that brings **memory**, **consistency**, and **reduced hallucination** (only humans should) to AI-assisted development. TRIP helps you enter flow state and eat features like buttered noodles.
 It is also the acronym (reversed) of the historical 4-phases development cycle: **P**lan, **I**mplement, **R**eview, **T**est.  
-**Note:** Since v2.0.0 the flow is even simpler **Plan → Implement → Release** — review and test moved *inside* Implement as a testing gate and an automatic Codex review loop, every feature passes through all 4 phases with fewer commands.
+**Note:** This adaptive fork keeps the v2 **Plan -> Implement -> Release** structure, but scales planning, independent review, testing, and release ceremony to the task. Every change is verified; only changes that benefit from premium review pay for it.
 
 TRIP was initially designed for Claude Code using the [Agent Skills](https://agentskills.io/home) open standard (`SKILL.md`). Also compatible with OpenCode, Codex CLI, Mistral Vibe and more.
 
@@ -24,15 +24,53 @@ Even the "simple" ones come with:
 
 | That's it           | Just these                                             |
 | ------------------- | ------------------------------------------------------ |
-| `/TRIP-1-plan`      | Think before you code (Codex reviews the plan)         |
-| `/TRIP-2-implement` | Codex writes, you review, tests gate, Codex re-reviews |
-| `/TRIP-3-release`   | Version, changelogs, docs, commit, tag, merge, push    |
+| `/TRIP-1-plan`      | Classify first; skip, focus, or deepen planning         |
+| `/TRIP-2-implement` | Luna writes; Fable verifies; Sol reviews when warranted |
+| `/TRIP-3-release`   | Optional version, docs, commit, tag, merge, and push    |
 
 ![TRIP Workflow loop](assets/trip-workflow-loop2.png)
 
 Three numbered skills. One architecture file. Zero PhD required.
 
 The onboarding is: copy the folder, run init, start coding. If you can count to 3, you can TRIP.
+
+## Adaptive workflow
+
+Start with `/TRIP-1-plan <task>`. It invokes the shared `trip-classify` rules before any delegation. Small work routes straight to implementation; medium and high work create the appropriate plan. You can still invoke `/TRIP-2-implement` with an existing plan or task, and `/TRIP-3-release` remains available for explicit manual control.
+
+| Tier | Typical work | Enabled by default | Skipped by default |
+| --- | --- | --- | --- |
+| **SMALL** | Typo, copy/UI tweak, simple config, obvious localized fix | Luna implementation; Fable diff review and relevant verification | Formal plan, requirements grilling, both Sol reviews, release |
+| **MEDIUM** | Multi-file feature, endpoint, business logic, meaningful refactor, large mechanical rename | Fable plan; Luna implementation; Fable fixes/tests; one fresh Sol final review | Requirements grilling, Sol plan review, mandatory plan approval, release |
+| **HIGH** | Auth, security, payments, migration, destructive data, concurrency, public compatibility, major architecture | Requirements discovery; detailed plan; fresh Sol plan review; plan approval; Luna implementation; Fable fixes/tests; fresh Sol final review | Release unless explicitly requested |
+
+Classification is a judgment call, not a rigid line-count formula. Risk and ambiguity dominate size: a one-file authentication change is HIGH, while a large repetitive low-risk rename can remain MEDIUM. The classifier considers affected files, implementation size, ambiguity, architecture, security/auth, persistence and migrations, public API compatibility, payments, concurrency, integrations, testing complexity, reversibility, and data-loss potential.
+
+### Overrides
+
+Add preferences directly to the request: `tier: small`, `tier: medium`, `tier: high`, `skip sol review`, `include sol plan review`, `skip release`, `full trip`, `budget mode`, or `maximum review`.
+
+- `full trip` enables every original stage, including release.
+- `budget mode` or `skip sol review` can remove Sol from SMALL/MEDIUM while retaining Fable verification.
+- `include sol plan review` and `maximum review` add independent review without forcing release.
+- A lower tier or reduced review is rejected when auth, security, payments, migrations, destructive data, concurrency, public compatibility, or comparable HIGH risk is present. The classifier prints why it promoted the route.
+
+Example output:
+
+```text
+Workflow tier: MEDIUM
+Reason: Multi-file feature with new business logic, but no migration, security, or architectural impact.
+Stages enabled:
+- Fable planning
+- Luna implementation
+- Fable verification
+- Sol final review
+Stages skipped:
+- Requirements grilling
+- Sol plan review
+- User plan approval
+- Release
+```
 
 It was kept stupid simple because **the goal is to ship features, not to master a workflow**. The workflow should disappear into the background, not become a project of its own.
 
@@ -47,7 +85,7 @@ It was kept stupid simple because **the goal is to ship features, not to master 
 
 Also copy `AskUserQuestion/` to your agent `/skills/`, it provides the `AskUserQuestion` tool that TRIP workflow rely on.  
 
-Et voila ! Start using the skills like `/TRIP-1-plan auth for this webapp`, `/TRIP-2-implement @auth-plan.md`, etc.
+Et voila! Start with requests such as `/TRIP-1-plan adjust the empty-state copy` or `/TRIP-1-plan add OAuth login, maximum review`. Use `/TRIP-1-plan <task>, full trip` to force the original complete workflow.
 
 https://github.com/user-attachments/assets/d37bbc60-1868-4fa8-9be6-083b60d6a53d
 
@@ -73,7 +111,7 @@ ARCHI.md is designed to be:
 - **Structured** for quick navigation
 - **Updated** after every architectural change
 
-It's not a dump of your entire codebase, rather a curated architectural guide.
+It's not a dump of your entire codebase, rather a curated architectural guide. Delegated workers read it first when present, then agent guidance, the active task/plan, and only directly relevant source and tests. Any architectural change must update `ARCHI.md` in the same implementation.
 
 ## The Init Process
 
@@ -101,13 +139,17 @@ Init walks you through questions and replaces these placeholders based on your a
 
 ### `/codex-implement`
 
-Implementation delegated to Codex CLI in a **workspace-write sandbox**: it reads the approved plan, edits the working tree, runs your lint/build, and reports back with a completion tag. Your main agent then self-reviews the diff and fixes issues directly. Persistent thread per plan, so multi-phase plans resume with full context. Integrated into TRIP-2-implement as the default implementation path.
+Luna implementation delegated to Codex CLI in a **workspace-write sandbox**: it reads the active task or approved plan, edits the working tree, runs relevant checks, and reports back with a completion tag. Fable then reviews and fixes the diff. Persistent thread per target supports multi-phase work without broad repository rereads.
 
 ### `/codex-plan-review` & `/codex-code-review`
 
-Iterative review loops powered by Codex CLI. Plans get a second-opinion review before the user sees them. Code gets reviewed against the plan and a shared checklist after implementation. Both use persistent thread state for multi-round convergence (`start → REQUEST_CHANGES → fix → resume → APPROVED`). Integrated directly into TRIP-1-plan and TRIP-2-implement (after the testing gate).
+Iterative Sol review loops powered by Codex CLI. HIGH plans get a fresh read-only plan review; MEDIUM/HIGH code gets a separate fresh final review unless a safe override skips MEDIUM review. Threads persist only within their own convergence loop (`start -> REQUEST_CHANGES -> fix -> resume -> APPROVED`).
 
-Per-flow model defaults (implementation vs reviews) live in one file — `codex-plan-review/scripts/_common.sh` — and can be overridden per run via `CODEX_MODEL` / `CODEX_EFFORT` env vars.
+Per-flow model defaults live in one file: `codex-plan-review/scripts/_common.sh`. Luna handles implementation; Sol is reserved for independent adversarial review; Fable owns requirements, plans, verification strategy, fixes, and final judgment. Sol defaults to `high` reasoning. HIGH risk exports the workflow tier and selects centralized `xhigh`; per-run `CODEX_MODEL` / `CODEX_EFFORT` overrides remain available.
+
+### Live Codex progress
+
+Implementation, review, and resume launchers save the complete JSONL event stream and stderr under their existing state paths while printing a concise live stream: session/turn lifecycle, commands and tests starting/completing, file changes, and errors. Raw JSON is not dumped to the terminal. Thread IDs and final report files remain available for resume/show operations. The bundled parser uses only the Python 3 standard library (no `jq` package), and the `tee` pipelines run under `set -o pipefail`, so Codex, logging, or parser failures remain non-zero instead of being hidden.
 
 ### `/TRIP-review` & `/TRIP-test`
 
@@ -140,9 +182,11 @@ As a rule of thumb, ARCHI.md should not exceed ~10% of context window.
 
 Just like you wouldn't smell your own fart, an LLM is unlikely to catch bugs in its own implementation. Some people conduct adversarial review with a different session but still the same model, which is..._meh_. The best approach is to introduce a different model in the same reasoning ballpark as the first one, that will most likely catch what the other missed.
 
-As of v2.0.0, this multi-agent approach is **the default workflow**.  
-Considering Claude as your main and Codex as the copilot:  
-Fable writes the plan, 5.6 Sol reviews it, Luna implements, back to Fable who reviews and fixes the diff, runs the testing gate, then a new Sol thread reviews again the code. All in one claude code session. Writer and reviewer are never the same thread.  
+The adaptive tiers use this multi-agent approach only where it buys meaningful confidence.
+
+Considering Claude as your main and Codex as the copilot:
+
+Fable classifies, plans where needed, reviews and fixes the diff, and owns verification. Luna implements. Sol independently reviews HIGH plans and MEDIUM/HIGH code in separate fresh threads. Sol never implements and is skipped for trivial work.
 As of mid july 2026, this Fable + GPT5.6 harness combo is absolute peak.
 
 ## MCP Servers: Less Is More

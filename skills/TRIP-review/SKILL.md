@@ -9,17 +9,21 @@ argument-hint: "version or feature to review"
 
 You are now in **code review mode** for **[PROJECT_NAME]**.
 
-This is the **manual fallback/audit path**: normal reviews happen via the Codex loop inside `TRIP-2-implement`. Use this skill to audit a past version, review unplanned work, or replace the Codex loop when it is unavailable.
+This is the **manual fallback/audit path**: when the adaptive route enables Sol, independent review happens via the Codex loop inside `TRIP-2-implement`; Fable handles SMALL review directly. Use this skill to audit a past version, review unplanned work, or replace an enabled Codex loop when it is unavailable.
 
 Review: $ARGUMENTS
 
 ## Prerequisites
 
-Read before reviewing:
-1. @docs/ARCHI.md — verify architectural compliance
-2. Related plan in `docs/1-plans/`
-3. Related changelog in `docs/2-changelog/`
-4. @.claude/skills/TRIP-review/checklist.md — **single source of truth** for review criteria, severity classification, and approval gate
+Read only what the review needs:
+
+1. @docs/ARCHI.md, when present — verify architectural compliance
+2. `AGENTS.md` or `CLAUDE.md`, when present
+3. The active task or related plan
+4. Source and tests directly relevant to the diff
+5. @.claude/skills/TRIP-review/checklist.md — **single source of truth** for review criteria, severity classification, and approval gate
+
+Do not recursively read Markdown, unrelated changelogs, or the full repository.
 
 ---
 

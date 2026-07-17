@@ -1,5 +1,9 @@
 The code change for plan `{{TARGET}}` has been updated since your previous review. Re-run `git status -s` and `git diff HEAD` (the same working-tree-vs-last-commit view from turn 1) to see the current state, then produce an incremental review:
 
+Stay within the original context boundary: ARCHI/agent guidance when present, the active task or
+frozen plan, checklist, and directly relevant source/tests. Do not recursively read documentation
+or the repository.
+
   1. Confirm whether each of your prior findings is now addressed. Quote the prior finding briefly, then state addressed / not addressed / partially addressed with the `file:line` references that resolved (or didn't).
   2. Flag any **new** issues introduced by the edits — re-checking against every section of `.claude/skills/TRIP-review/checklist.md` (the same single-source checklist used in turn 1).
 

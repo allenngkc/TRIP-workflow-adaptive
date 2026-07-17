@@ -60,7 +60,7 @@ Categorize each skill into one of:
 | **Updated — pure workflow** | Changed, but no project customizations | Replace directly |
 | **Updated — customized** | Changed, AND contains project-specific content | Extract → merge → replace |
 
-**Pure workflow skills** (no project customizations): `TRIP-compact`, `TRIP-hotfix`, `TRIP-research`, `TRIP-init`, `codex-implement`, `codex-plan-review`, `codex-code-review`
+**Pure workflow skills** (no project customizations): `TRIP-compact`, `TRIP-hotfix`, `TRIP-research`, `TRIP-init`, `trip-classify`, `codex-implement`, `codex-plan-review`, `codex-code-review`
 
 **Exception — model defaults**: `codex-plan-review/scripts/_common.sh` holds the per-flow Codex model/effort defaults, which the user may have tuned. Before replacing, diff the installed `_common.sh` against staging — if the model/effort values differ from the generic defaults, carry the user's values into the new file.
 
@@ -102,6 +102,7 @@ TRIP-research         | Unchanged            | Skip
 codex-plan-review     | New                  | Copy
 codex-code-review     | New                  | Copy
 codex-implement       | New                  | Copy
+trip-classify         | New                  | Copy
 ```
 
 `AskUserQuestion`: "Here's the upgrade plan. Proceed?"
@@ -184,12 +185,12 @@ If the installed version already has `checklist.md`:
 1. The extracted content is already in the right format
 2. Merge normally in Phase 4
 
-### 3.2 Codex Integration (TRIP-1-plan, TRIP-2-implement)
+### 3.2 Adaptive Classification and Codex Integration (TRIP-1-plan, TRIP-2-implement)
 
 **Old structure**: No Codex review steps
-**New structure**: TRIP-1-plan has Step 3 (Codex plan review), TRIP-2-implement has Codex Code Review section
+**New structure**: both entry points classify first; TRIP-1-plan conditionally runs plan review and TRIP-2-implement conditionally runs code review.
 
-These are pure workflow additions — no project-specific content to migrate. They will be applied from the new template. The only project-specific part is the test commands in TRIP-2-implement's Codex pre-step, which come from the extracted context.
+The routing gates and `trip-classify` skill are pure workflow additions. Apply them from the new template. The project-specific parts remain the planning guidance and TRIP-2 verification commands extracted from the installed workflow.
 
 ### 3.3 Codex Skills (codex-plan-review, codex-code-review, codex-implement)
 
@@ -292,6 +293,7 @@ If any are found, fill them from context or ask the user.
 - `codex-code-review/prompts/start.tpl` and `resume.tpl` reference `.claude/skills/TRIP-review/checklist.md` — confirm it exists, and that no template still points at the old `TRIP-3-review/` path
 - `codex-code-review/prompts/synthesize.tpl` and `codex-code-review/SKILL.md` reference `.claude/skills/TRIP-review/cr-template.md` — confirm it exists
 - `TRIP-1-plan` and `TRIP-2-implement` reference `codex-plan-review/scripts/start.sh` and `resume.sh`; `TRIP-2-implement` also references `codex-implement/scripts/start.sh` — confirm they exist
+- `TRIP-1-plan` and `TRIP-2-implement` reference `.claude/skills/trip-classify/SKILL.md`, and `trip-classify/scripts/classify.sh` exists
 
 ### 5.3 Present Summary
 

@@ -7,11 +7,19 @@ If `{{TARGET}}` resolves to a file under `docs/1-plans/`, it is the **implementa
 ALL of it and implement it. If it is not a path (a free-form label), implement from the
 instruction block at the bottom of this prompt.
 
-## Read first
+## Context boundary
 
-1. `docs/ARCHI.md` — architecture single source of truth
-2. The project's agent instructions (`AGENTS.md` or `CLAUDE.md`) — conventions and commands
-3. The plan `{{TARGET}}` (if a path)
+Read only what the task needs, in this order:
+
+1. `docs/ARCHI.md`, when present — curated architecture context
+2. `AGENTS.md` or `CLAUDE.md`, when present — conventions and commands
+3. The active task or frozen plan `{{TARGET}}`
+4. Source files directly relevant to the task
+5. Tests directly relevant to the task
+
+Do not recursively read Markdown files or ingest the full repository unless a concrete blocker
+requires broader inspection. Use the active classification and plan instead of rediscovering
+context already captured there.
 
 ## Scope & rules
 
@@ -22,6 +30,8 @@ instruction block at the bottom of this prompt.
 - Tick the checkboxes in the plan's To-dos for tasks you complete.
 - Run the project's lint and type-check/build commands (from the agent instructions) when done;
   fix your own failures before finishing.
+- If the implementation changes architecture, update `docs/ARCHI.md` in the same change when it
+  exists. Keep it curated: record architecture, not a repository dump.
 - Do NOT write tests unless the instruction block explicitly asks — the requester owns the
   testing gate that follows.
 - Do NOT commit, tag, bump versions, or touch changelogs/README/tutorials — the requester owns

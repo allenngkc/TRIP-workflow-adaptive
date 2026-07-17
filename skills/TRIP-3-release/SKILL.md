@@ -10,20 +10,20 @@ You are now in **release mode** for **[PROJECT_NAME]**.
 
 Release: $ARGUMENTS
 
-This skill runs after `TRIP-2-implement` has converged (implementation done, testing gate green, Codex code review `APPROVED` or explicitly skipped). It is normally chained from TRIP-2 in the same session, but can be invoked standalone in a fresh session.
+This skill runs only when release was explicitly enabled by the adaptive classification (`full trip` or a release request) or the user invokes `/TRIP-3-release` directly. It follows a converged `TRIP-2-implement` run (implementation done, tier-appropriate verification green, Sol code review `APPROVED` or safely skipped). It can also be invoked standalone in a fresh session.
 
 ---
 
 ## Prerequisites
 
 - Implementation complete and user-confirmed.
-- Testing gate green: affected unit tests pass.
-- Codex code review converged (`APPROVED`), or explicitly skipped by the user.
+- Tier-appropriate verification green: affected tests and checks pass.
+- Sol code review converged (`APPROVED`), or was skipped by the SMALL/MEDIUM route or an allowed override.
 - Lint and type-check/build green.
 
 ### Standalone verification (fresh session, not chained from TRIP-2)
 
-If this skill was NOT chained from a TRIP-2 session in the current conversation, verify before any release step:
+If this skill was NOT explicitly enabled and chained from a TRIP-2 session in the current conversation, confirm release intent and verify before any release step:
 
 ```bash
 # [ADAPT_TO_PROJECT: Replace with actual lint/type-check/test commands during Init]
@@ -67,7 +67,7 @@ Now that week (`a`) and version (`x.y.z`) are known:
 2. Content source:
    - **Multi-round loop**: state file has synthesized review + `PROMOTION_READY`. Strip sentinel.
    - **Turn 1 convergence**: state file has full review already.
-   - **Skipped Codex**: write CR from `.claude/skills/TRIP-review/cr-template.md` with body "Code review skipped — trivial change." Verdict: `APPROVED with observations`.
+   - **Skipped Sol**: write CR from `.claude/skills/TRIP-review/cr-template.md` with the tier and allowed skip reason (for example, SMALL route, `budget mode`, or `skip sol review`). Verdict: `APPROVED with observations` based on Fable verification; never claim an independent review occurred.
 
 3. Replace `<x.y.z>` with actual version. Fill any remaining `<...>` placeholders.
 

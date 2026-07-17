@@ -8,7 +8,7 @@ argument-hint: "<plan-path> [instructions] | reset <plan-path> | show <plan-path
 
 Non-interactive implementation via Codex CLI in a **workspace-write** sandbox: Codex reads the plan, edits the working tree directly, runs the project's lint/build on its own work, and reports back. One persistent thread per target, so multi-phase plans can be delegated phase by phase with full context retained.
 
-State persisted under `.claude/skills/codex-implement/state/<sanitized-target>.{thread,review.txt,events.ndjson}` (the `.review.txt` file holds Codex's implementation **report** — the naming comes from the shared helpers). `resume`/`reset`/`show` reuse the shared scripts from `codex-plan-review`; always export before invoking them:
+State persists under `.claude/skills/codex-implement/state/<sanitized-target>.{thread,review.txt,events.ndjson}` (the `.review.txt` file holds Codex's implementation **report** — the naming comes from the shared helpers). Full JSONL and stderr remain saved while a concise progress stream is printed live; resumed turns append to the same logs. `resume`/`reset`/`show` reuse the shared scripts from `codex-plan-review`; always export before invoking them:
 
 ```bash
 export STATE_DIR=".claude/skills/codex-implement/state"
@@ -44,4 +44,5 @@ export STATE_DIR=".claude/skills/codex-implement/state"
 - Separate `STATE_DIR` from the review skills — the same plan path can hold an implementation thread and a review thread without collision.
 - Codex is instructed not to write tests (testing gate owns that) and not to touch release ceremony.
 - Network is blocked in the sandbox: if the plan requires installing a new dependency, Codex will report it as a leftover — install it yourself during self-review.
-- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation → gpt-5.6-luna, reviews → gpt-5.6-sol, effort xhigh; derived from `STATE_DIR`). Adjust that one file to your preferred models, or override per run via `CODEX_MODEL` / `CODEX_EFFORT` env vars; the scripts echo the effective values.
+- Model/effort defaults live in `codex-plan-review/scripts/_common.sh` (implementation -> Luna, reviews -> Sol). Routine effort is `high`; exporting `TRIP_WORKFLOW_TIER=HIGH` selects centralized `xhigh` review effort. Override a run with `CODEX_MODEL` / `CODEX_EFFORT`.
+- Live output includes session/turn lifecycle, commands, file changes, and errors without dumping raw JSON. Pipeline failures remain non-zero because the shared scripts use `set -o pipefail`.

@@ -1,5 +1,8 @@
 The plan at `{{TARGET}}` has been updated since your previous review. Re-read it and produce an incremental review:
 
+Stay within the original context boundary: ARCHI/agent guidance when present, the frozen plan,
+and only directly relevant source/tests. Do not recursively read documentation or the repository.
+
   1. Confirm whether each of your prior findings is now addressed. Quote the prior finding briefly, then state addressed / not addressed / partially addressed with the line numbers that resolved (or didn't).
   2. Flag any **new** issues introduced by the edits.
 

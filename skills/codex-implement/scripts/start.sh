@@ -9,8 +9,8 @@
 # turns reuse the shared resume.sh unchanged.
 #
 # Usage: start.sh --prompt-file <tpl> <target> [custom instructions…]
-# Exits 0 on success, 1 on Codex / thread_id capture failure,
-# 2 on an existing thread (use reset.sh first).
+# Exits 0 on success, propagates a non-zero Codex/pipeline status,
+# or exits 1 on thread_id capture failure / 2 on an existing thread.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,30 +57,35 @@ fi
 
 PROMPT="$(load_prompt "$PROMPT_FILE")"
 
-# Run Codex non-interactively: JSONL events to stdout, last message to file.
-# workspace-write sandbox: Codex edits files in the repo and runs commands
-# (lint/build); no network, no destructive access outside the workspace.
-codex exec \
-    --json \
-    --skip-git-repo-check \
-    --sandbox workspace-write \
-    --color never \
-    -c model="$CODEX_MODEL" \
-    -c model_reasoning_effort="$CODEX_EFFORT" \
-    -o "$REPORT_FILE" \
-    "$PROMPT" \
-    </dev/null \
-    >"$EVENTS_FILE" \
-    2> "$EVENTS_FILE.stderr" || {
-        rc=$?
-        echo "error: codex exec failed (rc=$rc)" >&2
-        echo "stderr tail:" >&2
-        tail -20 "$EVENTS_FILE.stderr" >&2
-        exit 1
-    }
+# Save full JSONL/stderr while rendering concise live progress. The sandbox
+# remains workspace-write: no unrestricted or --yolo execution.
+if run_codex_with_progress \
+    "$EVENTS_FILE" "$EVENTS_FILE.stderr" "$THREAD_FILE" truncate \
+    codex exec \
+        --json \
+        --skip-git-repo-check \
+        --sandbox workspace-write \
+        --color never \
+        -c model="$CODEX_MODEL" \
+        -c model_reasoning_effort="$CODEX_EFFORT" \
+        -o "$REPORT_FILE" \
+        "$PROMPT" \
+        </dev/null
+then
+    :
+else
+    rc=$?
+    [ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+    echo "error: codex exec failed (rc=$rc)" >&2
+    if [ -s "$THREAD_FILE" ]; then
+        echo "thread id captured for resume: $(cat "$THREAD_FILE")" >&2
+    fi
+    echo "stderr saved to $EVENTS_FILE.stderr" >&2
+    exit "$rc"
+fi
 
-THREAD_ID="$(jq -r 'select(.type == "thread.started") | .thread_id' \
-                "$EVENTS_FILE" 2>/dev/null | head -1)"
+[ -s "$THREAD_FILE" ] || capture_thread_from_events "$EVENTS_FILE" "$THREAD_FILE"
+THREAD_ID="$(cat "$THREAD_FILE" 2>/dev/null || true)"
 
 if [ -z "$THREAD_ID" ] || [ "$THREAD_ID" = "null" ]; then
     echo "error: no thread.started event found in $EVENTS_FILE" >&2
@@ -89,7 +94,6 @@ if [ -z "$THREAD_ID" ] || [ "$THREAD_ID" = "null" ]; then
     exit 1
 fi
 
-printf '%s\n' "$THREAD_ID" > "$THREAD_FILE"
 echo "started implementation session for $TARGET"
 echo "  thread id:   $THREAD_ID"
 echo "  model/effort: $CODEX_MODEL / $CODEX_EFFORT"
